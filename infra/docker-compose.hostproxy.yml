@@ -1,0 +1,14 @@
+# Override for a VPS that ALREADY runs a reverse proxy on the host (Caddy or
+# nginx owning ports 80/443). Start only the media server and the site, and
+# expose the site to the host loopback so the host proxy can reach it:
+#
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostproxy.yml \
+#     --env-file .env up -d --build mediamtx web
+#
+# Naming `mediamtx web` on the command line is what keeps the bundled caddy
+# service from starting. The host proxy then needs one site block, see
+# docs/DEPLOY.md "Existing reverse proxy on the host".
+services:
+  web:
+    ports:
+      - "127.0.0.1:3000:3000"

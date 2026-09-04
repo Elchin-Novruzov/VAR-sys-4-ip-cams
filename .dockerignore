@@ -1,0 +1,11 @@
+node_modules
+.next
+.mediamtx
+recordings
+clips
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+docs
+infra

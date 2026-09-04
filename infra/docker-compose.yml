@@ -1,0 +1,59 @@
+# Padel VAR on one VPS. Run from the project root:
+#   docker compose -f infra/docker-compose.yml --env-file .env up -d --build
+#
+# Only three ports reach the internet: 80/443 (the site, via Caddy with
+# automatic HTTPS), 1935 (cameras publishing RTMP) and 8890/udp (optional SRT
+# relay). HLS, playback and the control API stay on the internal network.
+
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:1.20.1
+    restart: unless-stopped
+    environment:
+      # Overrides the camera publish password in mediamtx.yml.
+      MTX_AUTHINTERNALUSERS_0_PASS: ${PUBLISH_PASS:?set PUBLISH_PASS in .env}
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+      - recordings:/recordings
+    ports:
+      - "1935:1935"
+      - "8890:8890/udp"
+
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      MEDIAMTX_PLAYBACK_URL: http://mediamtx:9996
+      MEDIAMTX_HLS_URL: http://mediamtx:8888
+      MEDIAMTX_API_URL: http://mediamtx:9997
+      CLIPS_DIR: /app/clips
+      COURTS_FILE: /app/config/courts.json
+    volumes:
+      - clips:/app/clips
+      - ../config:/app/config:ro
+    depends_on:
+      - mediamtx
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  recordings:
+  clips:
+  caddy_data:
+  caddy_config:

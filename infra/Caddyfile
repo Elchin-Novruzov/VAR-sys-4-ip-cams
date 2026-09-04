@@ -1,0 +1,7 @@
+{$DOMAIN} {
+	encode gzip
+	# Long-lived video responses: do not buffer them.
+	reverse_proxy web:3000 {
+		flush_interval -1
+	}
+}

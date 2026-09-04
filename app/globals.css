@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0b0f14;
+  --panel: #131a22;
+  --panel-2: #1a232e;
+  --line: #263241;
+  --text: #e6edf3;
+  --muted: #8b9bb0;
+  --accent: #38bdf8;
+  --accent-2: #22c55e;
+  --danger: #ef4444;
+  /* height of the app header; the replay and live pages fill the rest */
+  --app-header: 3.5rem;
+}
+
+/* Phones: a shorter header and 40 px controls, still a comfortable thumb
+   target, so the whole console fits an 844 px screen without scrolling. */
+@media (max-width: 639px) {
+  :root {
+    --app-header: 3rem;
+  }
+  button,
+  select,
+  input:not([type="range"]):not([type="checkbox"]) {
+    min-height: 40px;
+  }
+}
+
+/* Short landscape screens (a phone on its side): the header and the scrub
+   area get out of the way so the pictures get the height. */
+@media (max-height: 520px) and (orientation: landscape) {
+  :root {
+    --app-header: 0px;
+  }
+  .app-header {
+    display: none;
+  }
+  .auto-scrub {
+    display: none;
+  }
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  /* no rubber-banding behind the fixed-height console */
+  overscroll-behavior: none;
+}
+
+/* Tablet at the court: every control must be comfortable with a thumb. */
+button,
+select,
+input:not([type="range"]):not([type="checkbox"]) {
+  min-height: 44px;
+}
+button {
+  padding-left: 0.7rem;
+  padding-right: 0.7rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  touch-action: manipulation; /* no 300 ms tap delay, no double-tap zoom */
+}
+button:disabled {
+  opacity: 0.45;
+}
+@media (pointer: coarse) {
+  input,
+  select,
+  button {
+    font-size: 16px !important; /* iOS zooms into anything smaller */
+  }
+}
+
+/* Small zoom buttons overlaid on a picture. */
+.zoom-btn {
+  min-height: 32px !important;
+  height: 32px;
+  padding: 0 0.6rem;
+  font-size: 14px !important;
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+@media (pointer: coarse) {
+  .zoom-btn {
+    min-height: 40px !important;
+    height: 40px;
+    padding: 0 0.8rem;
+  }
+}
+
+/* Long-press on a video must not open the system menu. */
+video {
+  -webkit-touch-callout: none;
+}
+
+/* Position slider with a thumb-sized thumb. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 32px;
+  touch-action: pan-x;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -11px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--bg);
+}
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--bg);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

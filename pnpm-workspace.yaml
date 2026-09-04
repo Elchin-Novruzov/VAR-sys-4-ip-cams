@@ -1,0 +1,6 @@
+# Build scripts these packages ship are not needed here: tsx uses the
+# prebuilt esbuild binary package, sharp and unrs-resolver are optional.
+allowBuilds:
+  esbuild: false
+  sharp: false
+  unrs-resolver: false

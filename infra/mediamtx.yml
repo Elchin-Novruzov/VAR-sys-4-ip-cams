@@ -1,0 +1,102 @@
+# MediaMTX configuration for Padel VAR (tested with v1.20.1).
+#
+# One file for both local development (`pnpm mediamtx`, run from the project
+# root) and the Docker image (mounted at /mediamtx.yml). Paths are relative to
+# the working directory: ./recordings is var-replay/recordings locally and
+# /recordings in the container, where a volume is mounted.
+
+logLevel: info
+logDestinations: [stdout]
+
+###############################################
+# Authentication
+
+authMethod: internal
+authInternalUsers:
+  # The cameras. Each pushes its main stream to
+  #   rtmp://HOST:1935/<path>?user=cam&pass=<this password>
+  # Change the password before opening port 1935 to the internet. Docker
+  # Compose overrides it from .env via MTX_AUTHINTERNALUSERS_0_PASS.
+  - user: cam
+    pass: changeme
+    ips: []
+    permissions:
+      - action: publish
+        path: ~^court
+
+  # The Next.js server reads live and playback. It runs on the same host
+  # (local dev) or in the same Docker network, so it is allowed by source IP
+  # and needs no credentials. These ports are never published outside.
+  - user: any
+    pass:
+    ips: ["127.0.0.1", "::1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+    permissions:
+      - action: read
+      - action: playback
+      - action: api
+
+###############################################
+# Listeners
+
+# Control API, used by the site for the "streaming / no stream" indicator.
+api: yes
+apiAddress: :9997
+
+# Playback server: /list and /get over the recorded segments.
+playback: yes
+playbackAddress: :9996
+
+rtsp: no
+
+# Cameras publish here.
+rtmp: yes
+rtmpAddress: :1935
+
+# Live view for the browser, through the site's proxy.
+hls: yes
+hlsAddress: :8888
+# Keep the HLS muxer running even with nobody watching, so the live page
+# opens without a cold start. Two cameras cost nothing here.
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+
+webrtc: no
+
+# MoQ is on by default and generates a self-signed certificate in the working
+# directory on first start. Nothing here uses it.
+moq: no
+
+# Optional: a relay box can publish over SRT instead of RTMP (better on a
+# flaky uplink). Not needed when the cameras push RTMP themselves.
+srt: yes
+srtAddress: :8890
+
+###############################################
+# Recording: the rolling buffer replay is built on
+
+pathDefaults:
+  source: publisher
+  # Let a reconnecting camera take over its own path without waiting.
+  overridePublisher: yes
+
+  record: yes
+  recordPath: ./recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  # One-second parts: at most one second is lost on a crash, and a moment
+  # becomes replayable about that long after it happened.
+  recordPartDuration: 1s
+  recordMaxPartSize: 50M
+  # Short segments keep the newest video reachable quickly and make deletion
+  # granular. 4 hours of two cameras at 4 Mbps is roughly 14 GB on disk.
+  recordSegmentDuration: 15s
+  # The replay window. Must match retentionHours in config/courts.json.
+  recordDeleteAfter: 4h
+
+paths:
+  court1-north:
+    record: yes
+  court1-south:
+    record: yes

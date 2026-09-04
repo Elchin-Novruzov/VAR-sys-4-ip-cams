@@ -1,0 +1,14 @@
+{
+  "courts": [
+    {
+      "slug": "court1",
+      "name": "Court 1",
+      "club": "Padel club",
+      "retentionHours": 4,
+      "cameras": [
+        { "path": "court1-north", "label": "North end", "fps": 25 },
+        { "path": "court1-south", "label": "South end", "fps": 25 }
+      ]
+    }
+  ]
+}
