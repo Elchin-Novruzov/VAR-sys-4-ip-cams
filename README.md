@@ -1,3 +1,7 @@
+> **Status 2026-09-12:** live at https://72-62-236-90.sslip.io, both club cameras relayed since 2026-09-04.
+> Open items and the phase table: `PLAN.md` (status block). Club-side steps as they actually worked:
+> `docs/CLUB_VISIT_2026-09-04.md`, `docs/CAMERA_SETUP.md` §0, `infra/club-relay/README.md`.
+
 # Padel VAR
 
 Court replay for padel clubs on the cameras they already have. Both ends of
@@ -75,10 +79,12 @@ above. Four differences from the main workspace:
 
 ```
 app/            Next.js App Router: login, courts, replay, live, clips, share
-  api/video/    proxies to the media server (segments, time-range get, HLS)
+  api/replay/   the replay buffer as HLS, straight from the recording files
+  api/video/    live HLS proxied from the media server
   api/clips/    save / list / serve clips
-components/     replay console, zoom-pan, timeline, live grid, clip players
-lib/            media server client, courts config, clips, Mongo, helpers
+components/     replay console, scrubber, zoom-pan, live grid, clip players
+lib/            recordings index (replay HLS), replay player, media server
+                client, courts config, clips, Mongo, helpers
 config/         courts.json: which courts and camera paths exist
 infra/          mediamtx.yml, docker-compose.yml, Caddyfile, env.example
 scripts/        mediamtx (local server), sim (fake cameras), seed-user
@@ -87,7 +93,12 @@ scripts/        mediamtx (local server), sim (fake cameras), seed-user
 ## How replay works
 
 The media server records every camera into one-second fragments inside
-fifteen-second segments and deletes them after the retention window. The
-site asks it for "camera X from time T for N seconds", gets a browser-playable
-MP4, and plays it from memory. Seeking, frame stepping and slow motion are
-therefore instant, and both cameras are kept on the same timeline by the page.
+fifteen-second files and deletes them after the retention window. The site
+reads those files (`RECORDINGS_DIR`), cuts them into two-second pieces on
+keyframes and serves each camera's whole buffer as one HLS stream, so the
+page works like a YouTube video: one bar over the whole recording (zoom it to
+30, 5 or 1 minutes for precision), drag anywhere, play from anywhere. Only the
+couple of seconds at the target are downloaded (~1 MB per camera at 4 Mbps);
+what has played stays in the browser, so rolling back over it, frame
+stepping and slow motion are instant. The second camera follows the first
+one's clock.

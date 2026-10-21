@@ -58,5 +58,3 @@ export type SerializedClip = {
   shareToken: string;
 };
 
-/** One recorded segment as reported by MediaMTX's playback server. */
-export type Segment = { start: string; duration: number };

@@ -1,5 +1,3 @@
-import type { Segment } from "./types";
-
 // MediaMTX HTTP endpoints, as reached from the Next.js server. Never exposed
 // to the browser: every request goes through a route handler that first
 // checks the session and that the camera path is one from config/courts.json.
@@ -15,25 +13,6 @@ function authHeaders(): Record<string, string> {
   const pass = process.env.MEDIAMTX_READ_PASS;
   if (!user || !pass) return {};
   return { Authorization: "Basic " + Buffer.from(`${user}:${pass}`).toString("base64") };
-}
-
-/** Recorded timespans for one camera. MediaMTX: GET /list?path=&start=&end= */
-export async function listSegments(cameraPath: string, start?: Date, end?: Date): Promise<Segment[]> {
-  const u = new URL(`${PLAYBACK_URL}/list`);
-  u.searchParams.set("path", cameraPath);
-  if (start) u.searchParams.set("start", start.toISOString());
-  if (end) u.searchParams.set("end", end.toISOString());
-  const res = await fetch(u, { headers: authHeaders(), cache: "no-store" });
-  // A camera that has never streamed has no recordings folder yet, and
-  // MediaMTX answers that with 400 ("cannot find the path specified"), not
-  // 404 -- measured on 2026-09-04 against the same binary. Both mean "nothing
-  // recorded", which is a state the page shows, not a recorder failure. The
-  // route above already rejects cameras that are not in courts.json, so a 400
-  // here is never a bad path name.
-  if (res.status === 404 || res.status === 400) return [];
-  if (!res.ok) throw new Error(`mediamtx /list responded ${res.status}`);
-  const rows = (await res.json()) as { start: string; duration: number }[];
-  return rows.map((r) => ({ start: r.start, duration: r.duration }));
 }
 
 export type RecordingFormat = "fmp4" | "mp4";

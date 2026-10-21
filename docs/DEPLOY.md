@@ -77,6 +77,15 @@ replay should work a few seconds later.
 
 ## Operations
 
+- Deploying = the line above. `reset --hard origin/main` rather than
+  `git pull`: the public repo is a snapshot that has been re-exported with a
+  new history before, and `pull` then refuses unrelated histories. It only
+  touches tracked files; `.env` is untracked and stays.
+- Replay reads the recording files itself: the `web` container mounts the
+  `recordings` volume read-only at `/recordings` (`RECORDINGS_DIR`).
+  After a deploy, `https://DOMAIN/api/health` must show
+  `"recordings": {"cameras": {"court1-north": <files>, ...}}`; `null` means
+  the web container cannot see the volume.
 - Retention is `recordDeleteAfter` in `infra/mediamtx.yml`; keep
   `retentionHours` in `config/courts.json` equal to it.
 - Every compose command on the host-proxy VPS needs **both** files — the
@@ -87,7 +96,7 @@ replay should work a few seconds later.
   cd /root/padel-var
   docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostproxy.yml --env-file .env ps
   docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostproxy.yml --env-file .env logs --tail 50 mediamtx
-  git pull && docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostproxy.yml --env-file .env up -d --build mediamtx web   # deploy a new version
+  git fetch origin && git reset --hard origin/main && docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostproxy.yml --env-file .env up -d --build mediamtx web   # deploy a new version
   ```
 
 - Add a court or camera: edit `config/courts.json` and add the paths under

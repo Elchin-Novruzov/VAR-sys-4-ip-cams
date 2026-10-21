@@ -27,8 +27,8 @@
   }
 }
 
-/* Short landscape screens (a phone on its side): the header and the scrub
-   area get out of the way so the pictures get the height. */
+/* Short landscape screens (a phone on its side): the header gets out of the
+   way so the pictures get the height. */
 @media (max-height: 520px) and (orientation: landscape) {
   :root {
     --app-header: 0px;
@@ -36,8 +36,28 @@
   .app-header {
     display: none;
   }
-  .auto-scrub {
+  /* the replay controls stay on one line and slide sideways if they must */
+  .controls-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    column-gap: 0.4rem;
+  }
+  .controls-row::-webkit-scrollbar {
     display: none;
+  }
+  .controls-row > * {
+    flex-shrink: 0;
+  }
+  .controls-row button {
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+  .controls-row > div {
+    gap: 0.2rem;
+  }
+  .controls-row .play-btn {
+    min-width: 3.5rem;
   }
 }
 

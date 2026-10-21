@@ -51,21 +51,31 @@ verification is driving the real app in a browser (see below).
 
 ## Architecture in one breath
 
-MediaMTX receives RTMP from the cameras, records a rolling fMP4 buffer
-(1 s parts, 15 s segments, deleted after 4 h), and answers time-range
-requests. **Next.js is the only thing that talks to it**: every video byte
-goes through a route handler that checks the session and that the camera path
-exists in `config/courts.json`. Replay streams one fMP4 per camera for a
-time window into a Media Source Extensions buffer while it downloads
-(`lib/window-loader.ts`, `lib/mp4-stream.ts`; blob fallback without MSE) —
-seeking, frame stepping and slow motion are all local; cameras sync to the
-first camera's clock. Saving a clip cuts MP4s to `clips/<id>/` on disk plus
-a Mongo doc with a share token.
+MediaMTX receives RTMP from the cameras and records a rolling fMP4 buffer
+(1 s parts, 15 s files that start on a keyframe, deleted after 4 h).
+**Next.js is the only thing the browser talks to**: every video byte goes
+through a route handler that checks the session and that the camera path
+exists in `config/courts.json`. Replay (since 2026-10-21) is **one HLS
+timeline per camera over the whole buffer**: `lib/recordings.ts` indexes
+the recording files (moof boxes only), cuts them into ~2 s keyframe-aligned
+segments and serves a live playlist with delta updates
+(`/api/replay/<camera>/index.m3u8`), init sections and remuxed segments;
+`lib/replay-player.ts` plays it with hls.js (the browser's own HLS on an
+old iPhone) and maps video time to wall clock; `components/replay-console.tsx`
+keeps the second camera on the first one's clock and
+`components/scrubber.tsx` is the bar (All / 30m / 5m / 1m zoom). Live view
+still proxies MediaMTX's own HLS. Saving a clip cuts MP4s through MediaMTX's
+`/get` to `clips/<id>/` on disk plus a Mongo doc with a share token.
 
 Invariants that span files:
 
 - Camera paths in `config/courts.json` must match `paths:` in
   `infra/mediamtx.yml`; `retentionHours` must match `recordDeleteAfter`.
+- The site reads MediaMTX's recordings: `RECORDINGS_DIR` is the root of
+  `recordPath` (local `./recordings`; Docker: the `recordings` volume
+  mounted read-only into `web` at `/recordings`). `/api/health` shows the
+  files it sees per camera — `null` means the mount is missing.
+  `recordFormat: fmp4` is required (the index reads moof/trun and mtxi).
 - `proxy.ts` is the auth middleware; anything reachable logged-out must be in
   its `PUBLIC_PREFIXES` (login, share pages, shared-clip files,
   `/api/version`, manifest).
@@ -73,9 +83,9 @@ Invariants that span files:
   reload themselves on a new build. Keep the version route public and
   `no-store`.
 - Touch sizing lives in `app/globals.css` (44 px controls, 40 px under
-  640 px); short-landscape phones hide the header via the `.app-header` /
-  `.auto-scrub` media query. New controls inherit this — don't hardcode
-  heights.
+  640 px); short-landscape phones hide the header (`.app-header`) and keep
+  the replay controls on one line (`.controls-row`). New controls inherit
+  this — don't hardcode heights.
 
 ## Lessons already paid for (don't rediscover)
 
@@ -95,10 +105,37 @@ Invariants that span files:
 - Cameras record ~25 fps: the product is replay for disputes (double bounce,
   glass-first), **never** automatic line calling. Keep that framing in any
   user-facing text.
-- A replay window is 20 MB per camera (40 s at 4 Mbps). Never go back to
-  `res.blob()` for it: waiting for the whole file looked like a frozen page
-  at the club. Stream it (MSE), show progress per tile, abort on a new pick.
-  The recorder itself answers in milliseconds — measure before blaming it.
+- Replay used to fetch 40 s windows (blob, then MSE): rolling back past a
+  window's start was a new 20 MB-per-camera download, 16 s of blank picture
+  on a phone on 4G (measured 2026-10-21). Don't go back to windows; the HLS
+  timeline loads the ~2 s around the target, ~1 MB per camera.
+- hls.js `progressive: true` with a live playlist corrupts its timeline:
+  a reload copies a half-parsed segment's duration (one frame) into the new
+  playlist. Keep it off; segments are one moof+mdat.
+- hls.js only drops a running download when you seek *forward* past it;
+  rolling back waited for the old segment first. `CameraPlayer.seek` stops
+  and restarts loading for a target that is not downloaded.
+- Two cameras on one line: after a jump the second camera waits
+  (`held`, loading stopped) until the first shows its frame, then aligns;
+  a follower that falls behind seeks ahead without aborting its own
+  download, at most every 1.5 s — aborting made it chase for ever on 10 Mbps.
+  Resume = seek first, then startLoad, or hls.js fetches the old position.
+- `play()` on an *ended* video restarts it from the oldest moment (HTML
+  spec). The console stops at the end of a camera that stopped streaming.
+- Before hls.js reaches its start position the element sits at time 0 —
+  the oldest moment of the buffer. `CameraPlayer.wallNow()` stays null
+  until it is positioned (a camera created then opened 4 h back).
+- A playlist that never changes makes hls.js reload it in full every
+  second. A camera that stopped streaming gets `#EXT-X-ENDLIST` (after 10 s
+  without writes, never between two files); the page restarts its player
+  when the camera records again.
+- `lib/recordings.ts` keeps its index on `globalThis` (the dev server
+  gives each route its own module copy): **restart the dev server after
+  editing it**, a hot reload keeps the old instance.
+- Never run `pnpm mediamtx` (recordDeleteAfter 4h) on a folder holding
+  test recordings: it deletes them. Live tests record into a scratch
+  recordPath with their own MediaMTX config; read-only tests use a config
+  with `record: no`.
 
 ## Verifying in a real browser (no test framework)
 
@@ -115,6 +152,13 @@ The established workflow (see COMMIT_LOG entries from 2026-09-03):
 4. Responsive checks: assert
    `document.documentElement.scrollWidth <= clientWidth` at 390×844, 844×390,
    820×1180, 1180×820 and screenshot each; look at the screenshots.
+5. Replay timing: throttle with CDP `Network.emulateNetworkConditions`
+   (a phone on 4G: 10 Mbps, 60 ms) and read the players through
+   `window.__replay` (development builds, or `?debug` on any build):
+   `wallNow()`, `frameTime` (the frame on screen), `buffered()`. A
+   production build has no dev login: sign a session cookie with
+   `next-auth/jwt` `encode` and the local `AUTH_SECRET` (salt
+   `authjs.session-token`) instead of creating a user in the shared Mongo.
 
 ## Conventions
 

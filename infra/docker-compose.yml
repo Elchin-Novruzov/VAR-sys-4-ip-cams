@@ -31,9 +31,13 @@ services:
       MEDIAMTX_API_URL: http://mediamtx:9997
       CLIPS_DIR: /app/clips
       COURTS_FILE: /app/config/courts.json
+      # Replay reads MediaMTX's recording files directly (lib/recordings.ts).
+      RECORDINGS_DIR: /recordings
     volumes:
       - clips:/app/clips
       - ../config:/app/config:ro
+      # the media server's rolling buffer, read-only for the site
+      - recordings:/recordings:ro
     depends_on:
       - mediamtx
 

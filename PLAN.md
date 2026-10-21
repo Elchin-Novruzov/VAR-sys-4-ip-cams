@@ -4,6 +4,21 @@ Written 2026-09-02. The in/out CV system missed its deadlines; this is the
 product that buys time with stakeholders and is useful on its own. It reuses
 the club's existing security cameras and needs no hardware at the court.
 
+## Status 2026-10-21
+
+| | |
+|---|---|
+| site | **live at https://72-62-236-90.sslip.io** since 2026-09-03 — shared VPS, host Caddy + `mediamtx` / `web` containers in `/root/padel-var` |
+| cameras | both court cameras streaming since the 2026-09-04 club visit: a relay on the club PC (ffmpeg RTSP→RTMP, scheduled task, survives a cold reboot) over Wi-Fi; north = NVR ch2, south = ch8 |
+| phases | 1 simulator ✔, 2 cloud ✔, 3 cameras ✔ (via the relay, not camera push — the cameras sit behind the NVR), 4 courtside: tablet not yet reported, 5 later |
+| replay | one HLS timeline per camera over the whole 4 h buffer, served from the recording files (2026-10-21): drag anywhere, zoom the bar, roll back without reloading; deploy needs the compose change (recordings volume into `web`) |
+| deploy | export a snapshot to the public repo (github.com/Elchin-Novruzov/VAR-sys-4-ip-cams), the user runs `git fetch` + `git reset --hard origin/main` / `compose up` on the VPS (docs/DEPLOY.md); no SSH key from the dev machine |
+| open | ch8 shutter speed at the rack monitor; cable the PC off Wi-Fi (find the second router); upload speed test; photos of the rack; ch3 check; `padel-relay` task health; the courtside tablet |
+
+Decisions that were "undecided" on 2026-09-02 are settled: it runs on the VPS;
+the cameras are Dahua behind an NVR (`docs/CAMERA_SETUP.md` §0 has the real
+topology); the club needs the relay PC, not camera-side push.
+
 ## What it is
 
 A replay tool for disputes in club play: both ends of the court on one clock,

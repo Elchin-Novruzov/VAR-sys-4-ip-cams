@@ -5,6 +5,142 @@ as `padel_analytics/inout/COMMIT_LOG.md`.
 
 ---
 
+## 2026-10-21 — Replay is one timeline over the whole buffer ("like YouTube"); audit of why rolling back failed
+
+The user, after the 2026-09-04 streaming fix had been live for weeks:
+rolling back to watch a part of the recording "doesn't work, so slow and
+laggy, most times it doesn't do anything"; wanted a player "like YouTube"
+where every part of the video can be watched. Nothing changes on the club
+PC: the relay keeps pushing the same streams.
+
+**Audit of the old page** (40 s windows through MediaMTX `/get`), measured
+in headless Chrome as a phone (390×844, 10 Mbps, 60 ms) over the 4.4 h local
+recording:
+
+| step | result |
+|---|---|
+| the 4 h bar on a phone | 39 s per pixel |
+| pick 1.5 h back | picture after 3.4 s, paused (user picks started paused) |
+| drag the window slider back 20 s right after | **16.4 s** of blank "waiting": the 25 s run-up downloaded after the 15 s after the moment; 20 seeks per camera for one drag |
+| roll back more than 25 s before a pick | impossible without another pick on the 39 s/px bar |
+
+**New design.** The server reads MediaMTX's recording files itself and serves
+each camera's whole buffer as one HLS stream; the page plays it with hls.js.
+
+- `lib/recordings.ts` (new): indexes `RECORDINGS_DIR/<camera>/*.mp4` from the
+  moof boxes only (1 052 files per camera in 0.25–0.6 s; a refresh with
+  nothing new ~1 ms; a file that did not change is not re-read), cuts files
+  into ~2 s keyframe-aligned segments (two GOPs at the cameras' I-frame
+  interval 25), and serves a live playlist with delta updates
+  (CAN-SKIP-UNTIL 30 s: a reload is ~1.4 KB instead of 27 KB gzipped / 549 KB
+  raw for 4 h), init sections (video track only, durations zeroed — one
+  content hash per session) and segments remuxed to one moof+mdat with the
+  stream's own timestamps (mtxi DTS) and wall clock from mtxi NTP, so a
+  segment URL always yields the same bytes (`immutable` caching). Sessions
+  (publisher reconnects, codec changes, gaps) become EXT-X-DISCONTINUITY;
+  a camera that stopped streaming gets EXT-X-ENDLIST after 10 s of silence.
+- Routes: `/api/replay/<camera>/index.m3u8?e=<epoch>` (410 when the server
+  restarted and renumbered), `/init/<key>.mp4`, `/seg/<file>/<from>-<to>.m4s`,
+  `/api/replay/state?court=` (recorded spans for the bar). The old
+  `/api/video/get` and `/api/video/segments` routes, `lib/window-loader.ts`,
+  `lib/mp4-stream.ts` and `components/timeline.tsx` are gone; clips still cut
+  through MediaMTX `/get`.
+- `lib/replay-player.ts` (new): one hls.js player per camera (the browser's
+  own HLS on an iPhone without ManagedMediaSource; `?engine=native|hls`
+  forces one), mapping video time ↔ wall clock through the fragments'
+  program-date-time, coalesced seeks, the frame on screen via
+  requestVideoFrameCallback.
+- `components/scrubber.tsx` (new): one bar over the whole buffer, zoom chips
+  All / 30m / 5m / 1m (1 m = 0.16 s per pixel on a phone) with an overview
+  strip, time bubble above the finger, drag to look (the picture follows
+  inside downloaded video; elsewhere it fetches where the finger rests),
+  release to stay.
+- `components/replay-console.tsx` rewritten: opens playing 30 s before the
+  newest moment; −10 / −1 s / frame / play / +1 s / +10, ⟲ 10/30/60 s,
+  ● Live (6 s behind the newest segment so playback never stalls at the
+  edge), speeds, save; keyboard J/K/L, arrows, Home/End; play state kept
+  across seeks; per-tile spinner after 300 ms of waiting.
+- `instrumentation.ts` (new): builds the index at server start (3.1 s for
+  2 × 1 052 files in the production build).
+- `infra/docker-compose.yml`: `web` mounts the `recordings` volume read-only
+  at `/recordings` (`RECORDINGS_DIR`). `/api/health` reports the files it
+  sees per camera. `.env.example`, `docs/DEPLOY.md`, README, CLAUDE.md, PLAN.
+
+**Bugs found while driving it** (each reproduced in the browser first, then
+fixed; CLAUDE.md "Lessons" has the short form):
+1. hls.js `progressive: true` + live reloads: the reload copied a
+   half-parsed segment's duration (0.04 s) into the playlist, every other
+   segment, and hls.js's timeline drifted. Progressive off, one moof per
+   segment.
+2. hls.js finishes the old segment on a *backward* seek (it only aborts on
+   forward seeks): rolling back waited for it. Seeks into undownloaded video
+   now stop and restart loading at the target.
+3. Second camera: it kept downloading its previous target, then played the
+   wrong moment and re-seeked; on 10 Mbps its own catch-up seeks aborted its
+   download for ever. Now it waits (loading stopped) until the first camera
+   shows a jump's frame, retargets without aborting for small moves (frame
+   steps), and catches up by seeking ahead at most every 1.5 s.
+4. Resuming the second camera before seeking made hls.js fetch the old
+   position first: seek, then resume.
+5. A playlist that does not change made hls.js reload it in full every
+   second (3.4 MB in a minute): ENDLIST for stopped cameras; the page starts a
+   new player when the camera records again.
+6. `play()` on an ended video restarts it from the oldest moment (HTML spec):
+   at the end of a stopped camera the page jumped 4 h back. It stops now.
+7. Before hls.js reaches its start position the element is at time 0 — the
+   oldest moment: the clock briefly showed it, and a camera created then
+   would have opened 4 h back. Not trusted until positioned.
+8. Paused, the clock showed the playhead, which can sit between frames: a
+   frame step read −20 ms. It now shows the frame on screen; steps read −40.
+9. Focus "North" → "Both" resumed the hidden camera where it stopped; a
+   hidden camera focused alone never resumed. Both go through align-then-load.
+10. The second camera at the very newest moment flashed "no recording"
+    (its last segment can end a segment earlier): it waits at its edge.
+11. Next dev gives every route its own module copy: the index lives on
+    `globalThis` (restart the dev server after editing `lib/recordings.ts`).
+
+**After**, same phone profile (dev server; the production build gave the
+same numbers):
+
+| step | 10 Mbps | 20 Mbps |
+|---|---|---|
+| open → playing | 2.4 s | 1.4 s |
+| tap 1.5 h back | 0.95 s, 1 MB | 0.6 s |
+| drag back 20 s at 1 m zoom (from drag start, incl. the ~1 s drag) | 2.2 s | 1.8 s |
+| −10 into undownloaded video | ~1.0 s each, 1 MB | ~0.6 s |
+| −1 s inside what has played | 18–135 ms | 27–123 ms |
+| frame step | 74–84 ms (the first after a jump up to 240 ms), exactly −40 ms, both cameras on the same frame | 81–163 ms, same |
+| second camera on the leader's frame after a burst of jumps | 1.4 s | 0.6 s |
+| 10 s at 1× | no follower re-seeks, rates 1.00 | same |
+| ⟲ 10 s from 1.5 h back | 1.0 s | 0.55 s |
+
+Live test (MediaMTX recording `pnpm sim` into a scratch folder, 25 Mbps
+desktop): the bar's end grows 1 s per second, playlist reloads are deltas
+only (~1 KB/s per camera), ● Live 20 s with no stalls and the cameras 29 ms
+apart, ⟲ 10 s at live 150 ms, cameras stopped → both playlists closed and no
+reloads, cameras back → players resume, a tap before the gap lands there.
+Production build (`.next/standalone` on :3001, session cookie signed with the
+local AUTH_SECRET — no user created in Mongo): the 10 Mbps phone audit passes
+whole, JS heap 17 MB, unauthenticated replay routes 401. Layout at 390×844,
+844×390 (all controls on one line), 820×1180, 1180×820: no horizontal scroll;
+screenshots looked at. `pnpm typecheck`, `pnpm lint`, `pnpm build` clean.
+CPU stayed under 30% throughout (build pinned to 6 of 16 cores).
+
+**Not tested:** Safari and iPhone (no device here): hls.js through
+ManagedMediaSource on iOS 17.1+, the browser's own HLS on older iPhones —
+`?engine=native` / `?engine=hls` switch between them. The real cameras'
+2560×1440 stream: the simulator is 1280×800 at the same 4 Mbps with the same
+1 s GOP.
+
+**Known limit:** two 4 Mbps cameras need ~9 Mbps at 1× playback. On a 10
+Mbps phone line the second camera keeps up only just; focusing one camera
+halves it. The lever is the camera bitrate (or relaying the NVR substreams
+for a lighter "Both" view).
+
+**Deploy** (VPS): `git fetch origin && git reset --hard origin/main`, then the
+`up -d --build mediamtx web` line in docs/DEPLOY.md; `/api/health` must list
+the camera folders under `recordings`.
+
 ## 2026-09-04 (night) — Replay video streams in as it downloads; a far pick no longer looks frozen
 
 The user's report: on a 4 h recording, picking a moment about 1.5 h back
