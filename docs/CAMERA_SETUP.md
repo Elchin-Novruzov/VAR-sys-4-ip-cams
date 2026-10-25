@@ -1,7 +1,11 @@
 # Camera onboarding
 
-Goal: each court camera pushes its **main stream** to the VAR server on its
-own. Nothing else at the club changes; the NVR keeps recording as before.
+Goal: each court camera's **main stream** reaches the VAR server, pushed
+outbound from the club. Nothing else at the club changes; the NVR keeps
+recording as before. **What runs today (since 2026-09-04):** the relay on the
+club PC (§2c, `infra/club-relay/`) pulls channels 2 and 8 from the NVR and
+pushes them; §0 is the club as it really is. §1–§2b/§2d are the general
+onboarding options.
 
 Stream names (must match `config/courts.json` and `infra/mediamtx.yml`):
 

@@ -5,6 +5,50 @@ as `padel_analytics/inout/COMMIT_LOG.md`.
 
 ---
 
+## 2026-10-25 — HANDOVER.md, every doc brought to the current state, the replay audit committed
+
+The owner asked for a handover file another agent can start from, and for
+all the documents to say what is true now.
+
+- **`HANDOVER.md` (new)**: state on 2026-10-25, what the site does, where
+  everything lives (repos, server, database, club PC — no secrets), how it
+  works end to end with the replay pipeline step by step, a code map, every
+  route and who may call it, configuration and invariants, how to ship (export
+  and the server commands), a symptom → cause → check table, how to verify,
+  the performance baseline, known limits, open items in order, the rules, and
+  the history on one screen.
+- **Deploy check** (from outside, no server access): the server runs the
+  2026-10-21 version — `/api/health` has the new field — but showed
+  `"recordings": {"dir": "/recordings", "cameras": {}}` on Sunday 15:00: the
+  folder is mounted and readable, and empty. MediaMTX 1.20.1's cleaner
+  deletes empty camera folders (`deleteEmptyDirs` in
+  `internal/recordcleaner/cleaner.go`), and the `bluenviron/mediamtx:1.20.1`
+  image's working directory is `/` (read from Docker Hub), so
+  `./recordings` is the shared volume: the likely reading is that the cameras
+  had not streamed for 4 h. Not confirmed; HANDOVER §1/§8 and DEPLOY.md
+  "Replay shows nothing" have the two-minute check.
+- **Found while writing it:** AutoReload never reloads while a video plays,
+  and the replay page now plays continuously — a courtside tablet left
+  running keeps old code after a deploy. Listed as open item 2 with a fix
+  idea; not changed.
+- **`scripts/checks/` (new)**: `replay-audit.mjs` — the phone audit behind
+  the 2026-10-21 numbers, cleaned up (env knobs, playwright-core resolved
+  from the current folder, exit code 1 on a FAIL); `mint-session.mjs` — a
+  session cookie for a local production build; `README.md` — how to run
+  both, the production-build procedure, the live-edge test with a growing
+  recording, and how not to lose the 4.4 h test footage. Re-run against the
+  dev server on the test footage at 20 Mbps: all checks passed, exit 0;
+  the minted cookie gave 200 on `/api/replay/state`, no cookie 401.
+- Brought up to date: `README.md` (status, the public clone no longer
+  force-pushed, `scripts/checks/`), `CLAUDE.md` (HANDOVER first, status,
+  checks), `PLAN.md` (status block, architecture diagram and replay bullet,
+  "replayable after" ~3–4 s, viewer download), `docs/DEPLOY.md` (clone
+  command for the public repo, the commands run on the server's shell not
+  PowerShell, "Replay shows nothing"), `docs/CAMERA_SETUP.md` (what runs
+  today), `docs/CLUB_VISIT_2026-09-04.md` (marked historical, its "Next
+  visit" list still open), the workspace `CLAUDE.md` (var-replay bullet).
+- `pnpm lint` clean (the new scripts included); no app code changed.
+
 ## 2026-10-21 — Replay is one timeline over the whole buffer ("like YouTube"); audit of why rolling back failed
 
 The user, after the 2026-09-04 streaming fix had been live for weeks:

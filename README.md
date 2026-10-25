@@ -1,6 +1,7 @@
-> **Status 2026-09-12:** live at https://72-62-236-90.sslip.io, both club cameras relayed since 2026-09-04.
-> Open items and the phase table: `PLAN.md` (status block). Club-side steps as they actually worked:
-> `docs/CLUB_VISIT_2026-09-04.md`, `docs/CAMERA_SETUP.md` §0, `infra/club-relay/README.md`.
+> **Status 2026-10-25:** live at https://72-62-236-90.sslip.io, both club cameras relayed since
+> 2026-09-04, replay rebuilt on 2026-10-21 as one timeline over the whole buffer.
+> **New here? Read [HANDOVER.md](HANDOVER.md) first** — state, architecture, operations, open items.
+> Club-side steps as they actually worked: `docs/CAMERA_SETUP.md` §0, `infra/club-relay/README.md`.
 
 # Padel VAR
 
@@ -54,8 +55,8 @@ pnpm seed-user you@club.com "Your Name" a-strong-password admin
 ## Working from the public clone (a Mac at the club)
 
 `git clone https://github.com/Elchin-Novruzov/VAR-sys-4-ip-cams.git` gives the
-whole app with a one-commit history; the story is in `COMMIT_LOG.md` and
-`docs/`. On a Mac: `brew install node pnpm ffmpeg` (Node 22+), then the steps
+whole app as a series of snapshot commits; the story is in `HANDOVER.md`,
+`COMMIT_LOG.md` and `docs/`. On a Mac: `brew install node pnpm ffmpeg` (Node 22+), then the steps
 above. Four differences from the main workspace:
 
 - **`pnpm sim` defaults to two recordings that live outside this repo.** Point
@@ -69,8 +70,9 @@ above. Four differences from the main workspace:
   commit.
 - **Committing here and pushing to this repo is fine.** Say so afterwards: the
   main workspace (the private `padel-full` repo) merges your commits before
-  its next snapshot. Snapshots are force-pushed, so an unmerged commit here
-  would be overwritten — that is the only rule.
+  its next snapshot. Since 2026-10-21 snapshots are ordinary commits on top
+  of `main` (no force-push), so `git pull` works on a clone that only
+  follows it.
 - **Claude Code on the Mac:** `npm install -g @anthropic-ai/claude-code`, then
   `claude` inside the clone. It reads `CLAUDE.md`; it has none of the Windows
   sessions' memory, so `COMMIT_LOG.md` (newest first) is the memory.
@@ -87,7 +89,8 @@ lib/            recordings index (replay HLS), replay player, media server
                 client, courts config, clips, Mongo, helpers
 config/         courts.json: which courts and camera paths exist
 infra/          mediamtx.yml, docker-compose.yml, Caddyfile, env.example
-scripts/        mediamtx (local server), sim (fake cameras), seed-user
+scripts/        mediamtx (local server), sim (fake cameras), seed-user,
+                checks/ (the replay browser audit, see its README)
 ```
 
 ## How replay works

@@ -9,22 +9,25 @@ the court on one clock, rewind, scrub, slow motion, frame step, pinch zoom,
 "save this moment" with a public share link. Phones and tablets are the
 primary devices — every change must hold up at phone and tablet sizes.
 
+Start with [HANDOVER.md](HANDOVER.md): current state, how everything works,
+operations, troubleshooting and open items in one place.
+
 Where the story lives: [PLAN.md](PLAN.md) (product decisions, architecture,
 phases), [README.md](README.md) (local run), [COMMIT_LOG.md](COMMIT_LOG.md)
 (newest-first history of what changed and why — **read the top few entries
 first**, and add an entry with every commit), [docs/DEPLOY.md](docs/DEPLOY.md)
 and [docs/CAMERA_SETUP.md](docs/CAMERA_SETUP.md) (the path to production).
 
-Status 2026-09-04: **deployed and live at https://72-62-236-90.sslip.io**
-on the shared VPS (see `docs/DEPLOY.md`, "Existing reverse proxy on the host");
-both simulator cameras verified recording end to end. The club's NVR is not on
-the club network yet; the rack session that fixes that and starts the relay is
-scripted step by step in `docs/CLUB_VISIT_2026-09-04.md`.
+Status 2026-10-25: **live at https://72-62-236-90.sslip.io** on the shared
+VPS (`docs/DEPLOY.md`, "Existing reverse proxy on the host"); both court
+cameras relayed from the club PC since 2026-09-04; replay rebuilt on
+2026-10-21 (one HLS timeline over the recording files) and deployed. Still
+to confirm with the real cameras — HANDOVER.md §1 and §10.
 
 ## If this is the public clone
 
 This folder may be the public snapshot
-(github.com/Elchin-Novruzov/VAR-sys-4-ip-cams, a one-commit history exported
+(github.com/Elchin-Novruzov/VAR-sys-4-ip-cams, snapshot commits exported
 from the private `padel-full` workspace) cloned on the user's Mac. Same
 conventions apply — commit every turn, add a `COMMIT_LOG.md` entry — with two
 differences: **pushing to origin is allowed here** (the user owns the repo and
@@ -152,7 +155,9 @@ The established workflow (see COMMIT_LOG entries from 2026-09-03):
 4. Responsive checks: assert
    `document.documentElement.scrollWidth <= clientWidth` at 390×844, 844×390,
    820×1180, 1180×820 and screenshot each; look at the screenshots.
-5. Replay timing: throttle with CDP `Network.emulateNetworkConditions`
+5. Replay timing: `scripts/checks/replay-audit.mjs` does all of this and
+   prints OK/FAIL per step (`scripts/checks/README.md`). By hand: throttle
+   with CDP `Network.emulateNetworkConditions`
    (a phone on 4G: 10 Mbps, 60 ms) and read the players through
    `window.__replay` (development builds, or `?debug` on any build):
    `wallNow()`, `frameTime` (the frame on screen), `buffered()`. A

@@ -1,5 +1,10 @@
 # Club visit checklist — get the two court cameras streaming to the VAR server
 
+> Historical record of the 2026-09-04 visit. What is still current: the
+> Outcome section and the **"Next visit"** list at the end (still open on
+> 2026-10-25; HANDOVER.md §10). The current network facts are in
+> `CAMERA_SETUP.md` §0.
+
 Date: 2026-09-04. Budget: about one hour at the club, most of it at the NVR
 and the club PC. Everything here was prepared in the two AnyDesk sessions of
 2026-09-03; what is left needs hands at the rack.

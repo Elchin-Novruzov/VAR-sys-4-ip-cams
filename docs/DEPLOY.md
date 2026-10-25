@@ -14,7 +14,7 @@ One small server runs everything: the media server, the site, HTTPS.
 ```bash
 # on the server
 curl -fsSL https://get.docker.com | sh
-git clone <this repo> padel && cd padel/var-replay      # or copy the folder
+git clone https://github.com/Elchin-Novruzov/VAR-sys-4-ip-cams.git padel-var && cd padel-var   # the public snapshot is the var-replay folder itself
 cp infra/env.example .env && nano .env                  # DOMAIN, PUBLISH_PASS, MONGODB_URI (same server as the labeling site, database var-replay), AUTH_SECRET, AUTH_URL
 docker compose -f infra/docker-compose.yml --env-file .env up -d --build
 docker compose -f infra/docker-compose.yml --env-file .env logs -f
@@ -77,7 +77,12 @@ replay should work a few seconds later.
 
 ## Operations
 
-- Deploying = the line above. `reset --hard origin/main` rather than
+These commands run **on the server** (`ssh root@72.62.236.90`, or the
+hosting panel's browser terminal), whose shell accepts `&&`. Pasted into
+Windows PowerShell on a PC they fail — and `git reset --hard` must never run
+in the development workspace.
+
+- Deploying = the `git fetch … up -d --build` line below. `reset --hard origin/main` rather than
   `git pull`: the public repo is a snapshot that has been re-exported with a
   new history before, and `pull` then refuses unrelated histories. It only
   touches tracked files; `.env` is untracked and stays.
@@ -107,3 +112,21 @@ replay should work a few seconds later.
   a rolling buffer and needs none.
 - Never expose ports 8888, 9996 or 9997; the site proxies them with
   authentication.
+
+## Replay shows nothing
+
+`/api/health` → `recordings.cameras` lists the files the site sees per
+camera. MediaMTX deletes a camera's folder when its newest file is older than
+the retention, so `{}` usually means **no camera has streamed for 4 h**: the
+Courts page says "no stream"; fix the club relay
+(`infra/club-relay/README.md`). If the Courts page says "streaming" and
+`{}` stays for more than a minute, the `web` container does not see
+MediaMTX's volume:
+
+```bash
+docker inspect infra-web-1 --format '{{json .Mounts}}'      # the compose recordings volume at /recordings
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostproxy.yml --env-file .env exec web ls -la /recordings
+```
+
+(`exec mediamtx ls` does not work: the MediaMTX image has no shell.) More
+symptoms: HANDOVER.md §8.

@@ -4,16 +4,16 @@ Written 2026-09-02. The in/out CV system missed its deadlines; this is the
 product that buys time with stakeholders and is useful on its own. It reuses
 the club's existing security cameras and needs no hardware at the court.
 
-## Status 2026-10-21
+## Status 2026-10-25
 
 | | |
 |---|---|
 | site | **live at https://72-62-236-90.sslip.io** since 2026-09-03 — shared VPS, host Caddy + `mediamtx` / `web` containers in `/root/padel-var` |
 | cameras | both court cameras streaming since the 2026-09-04 club visit: a relay on the club PC (ffmpeg RTSP→RTMP, scheduled task, survives a cold reboot) over Wi-Fi; north = NVR ch2, south = ch8 |
 | phases | 1 simulator ✔, 2 cloud ✔, 3 cameras ✔ (via the relay, not camera push — the cameras sit behind the NVR), 4 courtside: tablet not yet reported, 5 later |
-| replay | one HLS timeline per camera over the whole 4 h buffer, served from the recording files (2026-10-21): drag anywhere, zoom the bar, roll back without reloading; deploy needs the compose change (recordings volume into `web`) |
+| replay | one HLS timeline per camera over the whole 4 h buffer, served from the recording files (2026-10-21): drag anywhere, zoom the bar, roll back without reloading. Deployed (the server has the new `/api/health` field); on 2026-10-25 it listed no camera folders — most likely no streaming for 4 h; to confirm with the real cameras (HANDOVER.md §1, §8) |
 | deploy | export a snapshot to the public repo (github.com/Elchin-Novruzov/VAR-sys-4-ip-cams), the user runs `git fetch` + `git reset --hard origin/main` / `compose up` on the VPS (docs/DEPLOY.md); no SSH key from the dev machine |
-| open | ch8 shutter speed at the rack monitor; cable the PC off Wi-Fi (find the second router); upload speed test; photos of the rack; ch3 check; `padel-relay` task health; the courtside tablet |
+| open | confirm replay on the real cameras (and an iPhone); AutoReload never fires while a video plays (a courtside tablet keeps old code); "Both" view on weak phone lines (two 4 Mbps streams); club: ch8 shutter at the rack monitor, cable the PC off Wi-Fi (find the second router), upload speed test, photos, ch3, `padel-relay` task health and log size; the courtside tablet. Ordered list: HANDOVER.md §10 |
 
 Decisions that were "undecided" on 2026-09-02 are settled: it runs on the VPS;
 the cameras are Dahua behind an NVR (`docs/CAMERA_SETUP.md` §0 has the real
@@ -48,13 +48,14 @@ calling is the next phase, on the 120 fps rig.
 
 ```
 CLUB (outbound only)                CLOUD VPS (docker compose)                  ANYWHERE
-court cameras ──RTMP push──────►    MediaMTX  :1935 rtmp in                       browser / tablet
-  (or a relay box, SRT)             ├ records fMP4, 1 s parts, 15 s segments,      over HTTPS
-                                    │   deletes after 4 h                            live tiles
-                                    ├ /list, /get   (playback by wall-clock time)    replay console
-                                    └ HLS           (live)                            saved clips
-                                    Next.js  (auth, UI, proxies; only it talks to MediaMTX)
-                                    Caddy    (HTTPS for the domain)
+cameras → NVR → relay PC            MediaMTX  :1935 rtmp in                       browser / tablet
+  (ffmpeg, RTMP push) ─────────►    ├ records fMP4 to a volume: 1 s parts,         over HTTPS
+                                    │   15 s files, deleted after 4 h                live tiles
+                                    ├ /get          (saving clips)                   replay console
+                                    └ HLS           (live)                           saved clips
+                                    Next.js  (auth, UI; reads the recording files
+                                             read-only and serves replay as HLS)
+                                    Caddy    (HTTPS; the host's own on this VPS)
                                     MongoDB (users, saved clips)
 ```
 
@@ -63,9 +64,12 @@ court cameras ──RTMP push──────►    MediaMTX  :1935 rtmp in   
   Next.js route handler that checks the session and the camera path.
 - Cameras publish with a user/password in the RTMP URL; the password is set
   from `.env` (`PUBLISH_PASS`).
-- Replay = the page fetches "camera X from T for N seconds" as one MP4 per
-  camera and plays from memory. All seeking and slow motion is local; the two
-  cameras are locked to the first one's clock.
+- Replay (since 2026-10-21) = each camera's whole buffer as one live HLS
+  playlist, built by the site from MediaMTX's recording files (~2 s
+  keyframe-aligned segments, delta playlist updates). The page plays it with
+  hls.js; only the segment at a target is downloaded, played video stays in
+  the browser, and the second camera follows the first one's clock. Details:
+  HANDOVER.md §4. (Until then: one 40 s MP4 window per camera at a time.)
 - Time = server arrival time. Both cameras push from the same LAN, so they
   land within a few hundred milliseconds of each other, which is well inside
   what 25 fps footage can show.
@@ -91,9 +95,10 @@ court cameras ──RTMP push──────►    MediaMTX  :1935 rtmp in   
 
 | item | figure |
 |---|---|
-| club upload needed | about 8 Mbps sustained, two 1080p cameras at 4 Mbps |
+| club upload needed | about 8 Mbps sustained, two cameras at 4 Mbps (set to 2560×1440, 25 fps, CBR 4096) |
 | disk for 4 h of two cameras | about 14 GB |
-| moment becomes replayable after | 1 to 2 s (one recording part) |
+| moment becomes replayable after | about 3 to 4 s (a 2 s segment is listed once the next keyframe is written) |
+| viewer download | about 4 Mbps per camera while playing (two cameras ≈ 9 Mbps); ~1 MB per camera per jump |
 | slow-motion floor in Chrome | 0.0625×; Safari may clamp lower speeds |
 | VPS | 2 vCPU, 4 GB, 40 GB disk is plenty; 10 to 25 USD a month |
 
