@@ -21,6 +21,7 @@ anything at the club.
 | version on the server | the 2026-10-21 replay rework (public repo `c23b905` = private workspace `f430e7f`), deployed by the owner. Confirmed from outside: `/api/health` has the new `recordings` field. |
 | cameras | two court cameras, relayed from the club since 2026-09-04 by a PC at the club (scheduled task, survives reboots) |
 | replay | one continuous timeline per camera over the last 4 h (§4) |
+| **detector cameras** (2026-10-26, **not deployed yet**) | the in/out system's high-speed cameras as extra angles: the detector PC pushes them while it runs (`live_multi.py run --var`), they record and replay like the club's cameras, a per-camera clock offset lines both systems up (Align, §4 "Several camera systems"). Tested end to end on the dev PC; ship with §7. |
 | **open check** | `/api/health` on 2026-10-25 15:00 showed `"recordings": {"dir": "/recordings", "cameras": {}}` — the site sees the recordings folder, but it was empty. MediaMTX deletes camera folders once the last file is older than 4 h, so this most likely means **the cameras had not streamed for 4 h** (a Sunday; club PC or relay off). It can also mean the volume is mounted wrong. §8 "Replay shows nothing" has the two-minute check. Not verified yet: the new replay page with the real cameras. |
 
 ## 2. What it does (for the people using it)
@@ -38,6 +39,14 @@ A referee or player at the court opens the site on a phone or tablet:
   South end" to focus one camera (the other stops downloading); Save.
   Keyboard: Space/K, J/L (±10 s), ←/→ (one frame), Shift+←/→ (±1 s),
   Home/End.
+- **More angles** (2026-10-26): while the in/out detector PC is at the court
+  and runs with `--var`, its cameras (up to four, 60 fps) appear as extra
+  tiles — 2 × 2 or 3 × 2 — next to the club's two, on the same clock.
+  Focus: **All / VAR / Detector**, or one camera from the picker. A
+  detector camera gets a tile only when it recorded something in the buffer.
+  A frame step follows the fastest camera on screen (1/60 s). **Align**
+  (staff/admin): pause on a clear moment, nudge one camera by a frame /
+  0.1 s / 1 s until it matches the others, "Save for everyone".
 - **Save** cuts 16 s around the moment from both cameras into MP4 files and
   gives a **share link** that works without a login (`/share/<token>`).
 - **Live** (`/courts/court1/live`): both cameras live (a few seconds late).
@@ -127,6 +136,35 @@ checks the session and that the camera is in `config/courts.json`.
    every 1.5 s) when more than 0.5 s off. ● Live plays 6 s behind the newest
    segment so it never stalls at the edge. `components/scrubber.tsx` is the bar.
 
+### Several camera systems on one clock (since 2026-10-26)
+
+```
+DETECTOR PC (in/out project, at the court a few hours a week)
+OV9281 120 fps ─► live_court.py capture ffmpeg ─┬─► detector + lossless recording (as before)
+(this PC / Pi 3 / Pi 5)                          └─► fps=60, NVENC H.264 4 Mbps, `fifo` (drops, never blocks)
+                                                     ─RTMP─► MediaMTX court1-det-<name> (recorded like the rest)
+```
+
+- Paths: `court1-det-local`, `-pi3cam1`, `-cam1`, `-cam2` (the detector's
+  camera names), `group: "detector"`, `fps: 60` in `config/courts.json`;
+  same names under `paths:` in `infra/mediamtx.yml`. The publish user is the
+  club relay's (`cam` + `PUBLISH_PASS`, path rule `~^court`).
+- **Why an offset:** a recording's wall clock is when the stream reached
+  MediaMTX; the club cameras come camera → NVR → relay PC → internet, the
+  detector cameras camera → PC encode → internet, a second or more apart.
+  `lib/offsets.ts` keeps one offset per camera (Mongo `camera_offsets`,
+  `_id` = path), added to every recorded time: `/api/replay/state` returns
+  spans already shifted (+ `offsetMs`), `CameraPlayer.offsetMs` shifts its
+  playlist times, `lib/clips.ts` cuts each camera at `start − offset`.
+  `PUT /api/replay/offset` (staff/admin) saves one; the page picks saved
+  offsets up within 5 s (unsaved Align drafts win locally).
+- Measured on the dev PC (simulated NVR camera + a detector clip through
+  the real capture code, 2026-10-26): both cameras on the same moment
+  within 13–15 ms paused and after −10 s; a frame step 16 ms; Align +0.1 s
+  moved only the detector's picture and re-lined it up (15 ms); live page
+  shows the streaming detector camera; with the server unreachable the
+  detector kept 120 fps, 0 frames dropped, recording intact.
+
 The old design (until 2026-10-21) fetched 40 s windows through MediaMTX `/get`;
 rolling back past a window's start re-downloaded ~40 MB (16 s of frozen
 picture on a phone on 4G, measured). Don't go back to it.
@@ -161,6 +199,7 @@ picture on a phone on 4G, measured). Don't go back to it.
 | `app/api/health`, `app/api/version` | deployment doctor (public), build id |
 | `lib/mediamtx.ts` | MediaMTX client: clip cutting (`/get`), live HLS, "who is streaming" (API) |
 | `lib/clips.ts`, `lib/courts.ts`, `lib/mongodb.ts`, `lib/http.ts`, `lib/time.ts` | clips, `config/courts.json`, Mongo, file/gzip responses, clock formatting |
+| `lib/offsets.ts`, `app/api/replay/offset` | per-camera clock offsets (Align) |
 | `instrumentation.ts` | builds the replay index at server start |
 | `proxy.ts`, `auth.ts` | auth middleware, Auth.js |
 | `config/courts.json` | courts and camera paths, `retentionHours` |
@@ -176,7 +215,8 @@ picture on a phone on 4G, measured). Don't go back to it.
 | `/login`, `/share/<token>`, `/api/clips/shared/<token>/file`, `/api/version`, `/manifest.webmanifest` | public | login, shared clips, build id |
 | `/api/health` | public | env presence, `recordings.cameras` (files per camera folder; `null` = folder unreadable) |
 | `/courts`, `/courts/<slug>`, `/courts/<slug>/live`, `/clips`, `/clips/<id>` | session | pages |
-| `/api/replay/state?court=<slug>` | session | per camera: epoch, recorded spans, newest moment, ended |
+| `/api/replay/state?court=<slug>` | session | per camera: epoch, recorded spans, newest moment, ended, `offsetMs` (spans include it) |
+| `PUT /api/replay/offset` `{court, camera, offsetMs}` | staff / admin | save one camera's clock offset (±30 s) |
 | `/api/replay/<camera>/index.m3u8?e=<epoch>` | session | replay playlist (`_HLS_skip=YES` → delta) |
 | `/api/replay/<camera>/init/<hash>.mp4` | session | init section |
 | `/api/replay/<camera>/seg/<file>/<from>-<to>.m4s` | session | media segment |
@@ -248,6 +288,9 @@ decides what is pushed.
 | Something odd only on an iPhone / iPad | untested engine path | try the page with `?engine=native`, then `?engine=hls`; report which works |
 | Stutter with both cameras on a phone | two 4 Mbps streams need ~9 Mbps | focus one camera ("North end" / "South end"); lasting fix in §10 |
 | South end smears fast balls | channel 8 shutter still automatic | next club visit, §10 |
+| No detector tiles | the detector PC is not publishing (or has not in the last 4 h) | on that PC: `live_multi.py run ... --var` with `VAR_SERVER` / `VAR_PUBLISH_PASS` in `pi_relay/.env`; `… logs mediamtx` shows `is publishing to path 'court1-det-…'` |
+| Detector tile stutters or freezes, the detector itself fine | the club's upload cannot carry the streams (the `fifo` drops) | lower `--var-kbps` / `--var-fps` on the detector PC; check the club's upload speed |
+| Detector and club cameras show different moments | offsets not set, or changed (a relay restart) | Align on the replay page, Save for everyone |
 
 ## 9. Changing and verifying
 
@@ -304,6 +347,13 @@ Open, roughly in order:
 5. **Courtside tablet** (phase 4) and a real domain instead of
    `72-62-236-90.sslip.io` (change `DOMAIN`, `AUTH_URL`, the Caddy block).
 6. Later: thumbnails while scrubbing, links to a moment (`?t=`), more courts.
+7. **Detector cameras, first real use** (2026-10-26 build): deploy (§7: the
+   MediaMTX container must restart for the new paths), set
+   `VAR_SERVER` / `VAR_PUBLISH_PASS` on the detector PC, run with `--var` at
+   the court, check the club's upload carries ~4 Mbps per detector camera
+   on top of the relay, Align each camera once, and see whether the offset
+   stays put from one session to the next. Six tiles on a phone are heavy
+   (decode and data); "VAR" / "Detector" / one camera keep it light.
 
 ## 11. Rules (the owner's, and lessons)
 
@@ -331,3 +381,4 @@ Open, roughly in order:
 | 2026-09-04 | club visit: relay running and reboot-proof over the PC's Wi‑Fi; real network mapped; relay URL bug fixed; replay windows streamed via MSE |
 | 2026-10-21 | the owner: rolling back "doesn't work, slow, laggy". Audit measured why; replay rebuilt as one HLS timeline over the recording files; 11 bugs found and fixed while driving it (COMMIT_LOG); exported and deployed |
 | 2026-10-25 | this handover; docs brought up to date; `scripts/checks/` committed |
+| 2026-10-26 | the in/out detector cameras as extra angles: N-camera grid, VAR / Detector focus, per-camera clock offsets + Align, detector uplink from `live_multi.py --var`; tested on the dev PC, not deployed |

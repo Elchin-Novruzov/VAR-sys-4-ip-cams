@@ -5,6 +5,56 @@ as `padel_analytics/inout/COMMIT_LOG.md`.
 
 ---
 
+## 2026-10-26 — The in/out detector cameras as extra angles: live, replay, side by side, one clock
+
+The owner: the VAR site should also show the in/out system's detector
+cameras, live and rolled back like the club's cameras, synced to the same
+moment, all side by side.
+
+- **Cameras**: `config/courts.json` gains `court1-det-local`, `-pi3cam1`,
+  `-cam1`, `-cam2` (`group: "detector"`, `fps: 60`; the club's two get
+  `group: "var"`); `infra/mediamtx.yml` the same four paths (record: yes).
+  The detector PC pushes them over RTMP with the club relay's publish user
+  (padel_analytics `live_multi.py run --var`: NVENC H.264, 60 fps, 4 Mbps,
+  a `fifo` output that drops instead of ever blocking the detector).
+- **Clock offsets** (`lib/offsets.ts`, Mongo `camera_offsets`): the two
+  camera systems reach MediaMTX with different delays, so each camera has an
+  offset added to all its recorded times. `/api/replay/state` returns spans
+  already shifted and `offsetMs`; `CameraPlayer` (`offsetMs`, `setOffset`)
+  shifts its program-date-time mapping everywhere (`wallAt`, `timeAt`,
+  `liveEdge`, `ranges`, `buffered`); `lib/clips.ts` cuts each camera at
+  `start − offset`. `PUT /api/replay/offset` (staff/admin, ±30 s).
+- **Replay page**: N cameras -- grid 1 / 2 (stacked in portrait) / 2 × 2 /
+  3 × 2; focus All (Both with two) / VAR / Detector / one camera (buttons with
+  two cameras, a picker with more); a detector camera gets a tile only when
+  it recorded something in the buffer (the PC is at the court a few hours a
+  week); frame step from the fastest camera on screen (a 60 fps detector
+  camera steps 1/60 s, the 25 fps ones hold their frame); per-camera fps in
+  the follower threshold; **Align** panel: pick a camera, ±1 s / ±0.1 s /
+  ±1 frame against the others (the others stay on the moment, this one's
+  picture moves), "Save for everyone", Undo; unsaved drafts survive the 5 s
+  state poll. `window.__replayState` (dev / ?debug): leader, held followers.
+- **Live page**: tiles for the club's cameras always, detector cameras only
+  while publishing (`mediamtxStatus`); same N-camera grid.
+- **Verified on the dev PC** (scratch MediaMTX recording to a temp folder,
+  `pnpm sim` as the north camera, an in/out clip through the real capture
+  code with `--uplink` as `court1-det-file1`, `pnpm dev` with a scratch
+  courts file and a throw-away `var-replay-test` database -- dropped after;
+  headless Chrome): both cameras on the same moment 13 ms apart paused and
+  after −10 s; one frame step = 16 ms; VAR / Detector focus show one tile
+  each; Align +0.1 s → offset 100, re-lined up 15 ms apart, saved offset
+  served by `/api/replay/state`; live page with both cameras playing; phone
+  390 × 844 no sideways scroll; a camera with no recordings gets no tile.
+  Found on the way: the uplink first reconnected every 2 s with nothing
+  recorded -- through `fifo` the encoder gave no global header and the flv
+  muxer failed ("extract_extradata"); `-flags +global_header` fixed it. A
+  `next dev` Turbopack internal error hung one route's compile; a restart
+  cleared it (not a code fault). `pnpm typecheck` / `pnpm lint` clean.
+- **Not deployed.** Shipping = export + the server commands (HANDOVER §7);
+  the MediaMTX container must restart for the new paths. The detector PC
+  needs `VAR_SERVER` and `VAR_PUBLISH_PASS` (= the server's `PUBLISH_PASS`)
+  in `padel_analytics/inout/pi_relay/.env`.
+
 ## 2026-10-25 — HANDOVER.md, every doc brought to the current state, the replay audit committed
 
 The owner asked for a handover file another agent can start from, and for

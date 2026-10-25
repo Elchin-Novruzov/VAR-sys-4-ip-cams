@@ -60,6 +60,15 @@ export function HlsPlayer({ src, className }: { src: string; className?: string 
   );
 }
 
+/** Same tiling as the replay page: two side by side (stacked in portrait),
+ *  then 2 x 2, then 3 x 2. */
+function liveGridFor(n: number): string {
+  if (n <= 1) return "grid-cols-1 grid-rows-1";
+  if (n === 2) return "portrait:grid-rows-2 portrait:grid-cols-1 landscape:grid-cols-2 landscape:grid-rows-1";
+  if (n <= 4) return "grid-cols-2 grid-rows-2";
+  return "portrait:grid-cols-2 portrait:grid-rows-3 landscape:grid-cols-3 landscape:grid-rows-2";
+}
+
 export function LiveGrid({ court }: { court: CourtConfig }) {
   return (
     <div className="flex flex-col overflow-y-auto" style={{ height: "calc(100dvh - var(--app-header))" }}>
@@ -76,10 +85,7 @@ export function LiveGrid({ court }: { court: CourtConfig }) {
           Replay
         </Link>
       </div>
-      <div
-        className="flex-1 grid gap-1 p-1 portrait:grid-rows-2 portrait:grid-cols-1 landscape:grid-cols-2 landscape:grid-rows-1"
-        style={{ minHeight: "clamp(200px, 45dvh, 520px)" }}
-      >
+      <div className={`flex-1 grid gap-1 p-1 ${liveGridFor(court.cameras.length)}`} style={{ minHeight: "clamp(200px, 45dvh, 520px)" }}>
         {court.cameras.map((cam) => (
           <div
             key={cam.path}

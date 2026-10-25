@@ -17,6 +17,11 @@ export type CameraConfig = {
   label: string;
   /** Frame rate the camera is set to. Drives the frame-step size in the player. */
   fps: number;
+  /** "var": the club's security cameras through the NVR relay (always on).
+   *  "detector": the in/out system's high-speed cameras, published by the
+   *  detector PC while it runs (padel_analytics live_multi.py --var).
+   *  Drives the focus buttons; absent = "var". */
+  group?: "var" | "detector";
 };
 
 export type CourtConfig = {

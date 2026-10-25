@@ -5,6 +5,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "./mongodb";
 import { getCourt } from "./courts";
 import { fetchRecording } from "./mediamtx";
+import { getOffsets } from "./offsets";
 import type { ClipDoc, SerializedClip } from "./types";
 
 export function clipsDir() {
@@ -40,9 +41,13 @@ export async function createClip(input: CreateClipInput): Promise<ClipDoc> {
   await mkdir(dir, { recursive: true });
 
   const cameras: ClipDoc["cameras"] = [];
+  const offsets = await getOffsets();
   for (const cam of court.cameras) {
+    // The moment is on the court clock; each camera's own recording times are
+    // that minus its offset (lib/offsets.ts), so every file shows the same moment.
+    const camStart = new Date(input.start.getTime() - (offsets[cam.path] ?? 0));
     // Plain MP4 rather than fMP4: it downloads and shares cleanly from any player.
-    const res = await fetchRecording(cam.path, input.start, input.durationSec, "mp4");
+    const res = await fetchRecording(cam.path, camStart, input.durationSec, "mp4");
     if (!res.ok) continue;
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.byteLength === 0) continue;

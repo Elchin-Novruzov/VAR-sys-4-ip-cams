@@ -6,8 +6,12 @@
       "club": "Padel club",
       "retentionHours": 4,
       "cameras": [
-        { "path": "court1-north", "label": "North end", "fps": 25 },
-        { "path": "court1-south", "label": "South end", "fps": 25 }
+        { "path": "court1-north", "label": "North end", "fps": 25, "group": "var" },
+        { "path": "court1-south", "label": "South end", "fps": 25, "group": "var" },
+        { "path": "court1-det-local", "label": "Detector · PC camera", "fps": 60, "group": "detector" },
+        { "path": "court1-det-pi3cam1", "label": "Detector · Pi 3", "fps": 60, "group": "detector" },
+        { "path": "court1-det-cam1", "label": "Detector · Pi 5 cam 1", "fps": 60, "group": "detector" },
+        { "path": "court1-det-cam2", "label": "Detector · Pi 5 cam 2", "fps": 60, "group": "detector" }
       ]
     }
   ]

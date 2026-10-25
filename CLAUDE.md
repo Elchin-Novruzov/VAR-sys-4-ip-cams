@@ -74,6 +74,12 @@ Invariants that span files:
 
 - Camera paths in `config/courts.json` must match `paths:` in
   `infra/mediamtx.yml`; `retentionHours` must match `recordDeleteAfter`.
+  That includes the in/out detector cameras (`court1-det-<name>`,
+  `group: "detector"`, pushed by padel_analytics `live_multi.py --var`).
+- Every recorded time is on the **court clock** = the camera's own times +
+  its offset (`lib/offsets.ts`): `/api/replay/state` shifts the spans,
+  `CameraPlayer.offsetMs` shifts the playlist times, `lib/clips.ts` cuts at
+  `start − offset`. Anything new that reads recording times must apply it too.
 - The site reads MediaMTX's recordings: `RECORDINGS_DIR` is the root of
   `recordPath` (local `./recordings`; Docker: the `recordings` volume
   mounted read-only into `web` at `/recordings`). `/api/health` shows the

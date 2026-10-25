@@ -100,3 +100,15 @@ paths:
     record: yes
   court1-south:
     record: yes
+  # The in/out system's high-speed cameras, pushed by the detector PC while it
+  # runs (padel_analytics: live_multi.py run --var): H.264 from its graphics
+  # card, 60 fps by default, ~4 Mbps each. Named after the detector's camera
+  # names; must match config/courts.json.
+  court1-det-local:
+    record: yes
+  court1-det-pi3cam1:
+    record: yes
+  court1-det-cam1:
+    record: yes
+  court1-det-cam2:
+    record: yes

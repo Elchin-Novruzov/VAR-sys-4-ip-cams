@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CourtConfig } from "@/lib/types";
+import type { CameraConfig, CourtConfig } from "@/lib/types";
 import { fmtClock } from "@/lib/time";
 import { CameraPlayer, pickEngine, type Engine, type WallRange } from "@/lib/replay-player";
 import { ZoomPan } from "./zoom-pan";
@@ -32,6 +32,8 @@ type CamInfo = {
   segments: number;
   /** The camera stopped streaming; its playlist is closed. */
   ended: boolean;
+  /** Clock correction for this camera (lib/offsets.ts); spans above include it. */
+  offsetMs?: number;
 };
 
 type Tile = { kind: "none" | "loading" | "ok" | "gap" | "error"; msg?: string; waiting?: boolean };
@@ -47,6 +49,29 @@ type Ui = {
 };
 
 const EMPTY_UI: Ui = { wall: null, playing: false, from: null, until: null, ranges: [], buffered: [], tiles: {} };
+
+/** Focus: "all", "group:<var|detector>", or one camera's path. */
+function shownIn(focus: string, cam: CameraConfig): boolean {
+  if (focus === "all" || focus === cam.path) return true;
+  return focus.startsWith("group:") && (cam.group ?? "var") === focus.slice(6);
+}
+
+/** Cameras worth a tile: the club's cameras always (they stream around the
+ *  clock), a detector camera only when it recorded something in the buffer --
+ *  the detector PC is at the court a few hours a week, and four empty tiles
+ *  the rest of the time would bury the two that matter. */
+function isHere(cam: CameraConfig, info: Record<string, { segments: number }>): boolean {
+  return (cam.group ?? "var") === "var" || (info[cam.path]?.segments ?? 0) > 0;
+}
+
+/** Grid for n tiles: side by side in landscape, stacked in portrait, and a
+ *  2 x 2 / 3 x 2 grid once there are more than two. */
+function gridFor(n: number): string {
+  if (n <= 1) return "grid-cols-1 grid-rows-1";
+  if (n === 2) return "portrait:grid-rows-2 portrait:grid-cols-1 landscape:grid-cols-2 landscape:grid-rows-1";
+  if (n <= 4) return "grid-cols-2 grid-rows-2";
+  return "portrait:grid-cols-2 portrait:grid-rows-3 landscape:grid-cols-3 landscape:grid-rows-2";
+}
 
 function mergeRanges(lists: WallRange[][]): WallRange[] {
   const all = lists.flat().sort((a, b) => a[0] - b[0]);
@@ -70,7 +95,7 @@ function mergeRanges(lists: WallRange[][]): WallRange[] {
  *  downloading). Every control lives in the bottom bar within thumb reach. */
 export function ReplayConsole({ court }: { court: CourtConfig }) {
   const cams = court.cameras;
-  const fps = cams[0]?.fps ?? 25;
+  const fpsOf = useCallback((path: string) => cams.find((c) => c.path === path)?.fps ?? 25, [cams]);
 
   const [engine, setEngine] = useState<Engine | null | undefined>(undefined);
   const [info, setInfo] = useState<Record<string, CamInfo>>({});
@@ -83,6 +108,14 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
   const [save, setSave] = useState<{ status: "idle" | "saving" | "done" | "error"; msg?: string; id?: string }>({
     status: "idle",
   });
+  /** Align panel: which camera is being lined up, its unsaved offset, status. */
+  const [align, setAlign] = useState<{ open: boolean; camera: string; msg?: string; busy?: boolean }>({
+    open: false,
+    camera: "",
+  });
+  /** Unsaved offsets from the Align panel; the 5 s state poll leaves these alone. */
+  const drafts = useRef<Record<string, number>>({});
+  const [draftTick, setDraftTick] = useState(0);
 
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const players = useRef<Record<string, CameraPlayer>>({});
@@ -105,7 +138,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
   const lastWall = useRef<number | null>(null);
 
   const visiblePaths = useCallback(
-    () => cams.map((c) => c.path).filter((p) => focusRef.current === "all" || focusRef.current === p),
+    () => cams.filter((c) => shownIn(focusRef.current, c) && isHere(c, infoRef.current)).map((c) => c.path),
     [cams],
   );
   const masterPlayer = useCallback((): CameraPlayer | null => {
@@ -138,6 +171,12 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
           p.destroy();
           delete players.current[path];
         }
+      }
+      // saved clock corrections (another viewer's Align, or ours): unsaved
+      // drafts in this page's Align panel win until saved or reset
+      for (const [path, ci] of Object.entries(data.cameras)) {
+        const p = players.current[path];
+        if (p && drafts.current[path] === undefined) p.setOffset(ci.offsetMs ?? 0);
       }
       infoRef.current = data.cameras;
       setInfo(data.cameras);
@@ -191,18 +230,21 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
         },
       });
       players.current[cam.path] = p;
+      p.setOffset(drafts.current[cam.path] ?? inf.offsetMs ?? 0);
       p.video.muted = true;
       p.video.playbackRate = rateRef.current;
       void p.start(startWall, OPEN_LEAD_SEC, wantPlay.current);
-      if (!(focusRef.current === "all" || focusRef.current === cam.path)) p.setLoading(false);
+      if (!shownIn(focusRef.current, cam)) p.setLoading(false);
     }
   }, [engine, info, cams, gen, refreshInfo]);
 
   useEffect(() => {
     const ps = players.current;
-    // browser tests (and ?debug on any build) can read the players' timelines
+    // browser tests (and ?debug on any build) can read the players' timelines,
+    // and which camera leads / which followers are held back (__replayState)
     if (process.env.NODE_ENV !== "production" || new URLSearchParams(window.location.search).has("debug")) {
       (window as unknown as { __replay: unknown }).__replay = ps;
+      (window as unknown as { __replayState: unknown }).__replayState = { held, master, focus: focusRef, gaps };
     }
     return () => {
       for (const k of Object.keys(ps)) {
@@ -269,7 +311,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
           if (!running) {
             if (!v.paused) v.pause();
             v.playbackRate = rateRef.current;
-            if (Math.abs(drift) > 0.4 / fps) p.seek(st, false);
+            if (Math.abs(drift) > 0.4 / fpsOf(path)) p.seek(st, false);
           } else {
             if (Math.abs(drift) > 0.5) {
               const last = lastCatchUp.current[path] ?? 0;
@@ -291,7 +333,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
       // what the screen shows: paused, the time of the frame actually on
       // screen (a pause can stop between two frames)
       let wall = m?.wallNow() ?? null;
-      if (m && m.video.paused && !m.video.seeking && m.frameTime !== null && Math.abs(m.frameTime - m.video.currentTime) < 1 / fps) {
+      if (m && m.video.paused && !m.video.seeking && m.frameTime !== null && Math.abs(m.frameTime - m.video.currentTime) < 1 / fpsOf(m.camera)) {
         wall = m.wallAt(m.frameTime) ?? wall;
       }
       if (wall !== null) lastWall.current = wall;
@@ -340,7 +382,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
     };
     const id = setInterval(tick, TICK_MS);
     return () => clearInterval(id);
-  }, [cams, fps, masterPlayer, visiblePaths]);
+  }, [cams, fpsOf, masterPlayer, visiblePaths]);
 
   // ---- moving around ----
   const limits = () => {
@@ -434,10 +476,20 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
     if (w !== null) seekWall(w + sec * 1000);
   };
 
-  /** One frame forward or back (paused), from the frame actually on screen. */
+  /** One frame forward or back (paused), from the frame actually on screen.
+   *  The fastest camera on screen that recorded this moment sets the step (a
+   *  60 fps detector camera steps 1/60 s; the 25 fps cameras hold their frame
+   *  until their next one is due). */
   const step = (n: number) => {
-    const m = masterPlayer();
+    const w0 = currentWall();
+    const cands = visiblePaths()
+      .map((p) => players.current[p])
+      .filter((p): p is CameraPlayer => !!p && (w0 === null || p.timeAt(w0) !== null))
+      .sort((a, b) => fpsOf(b.camera) - fpsOf(a.camera));
+    const m = cands[0] ?? masterPlayer();
     if (!m) return;
+    master.current = m.camera;
+    const fps = fpsOf(m.camera);
     pause();
     const v = m.video;
     const t =
@@ -470,7 +522,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
     for (const cam of cams) {
       const p = players.current[cam.path];
       if (!p) continue;
-      const shown = f === "all" || f === cam.path;
+      const shown = shownIn(f, cam);
       if (!shown) {
         // a hidden camera stops downloading and decoding
         held.current[cam.path] = false;
@@ -482,8 +534,65 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
         held.current[cam.path] = true;
       }
     }
-    if (f !== "all") master.current = f;
+    if (cams.some((c) => c.path === f)) master.current = f;
     if (w !== null) seekWall(w);
+  };
+
+  // ---- Align: line one camera up with the others ----
+  const alignPlayer = () => (align.camera ? players.current[align.camera] : undefined);
+  const savedOffset = (path: string) => infoRef.current[path]?.offsetMs ?? 0;
+  const currentOffset = (path: string) => drafts.current[path] ?? savedOffset(path);
+  /** Move the camera under alignment by `ms` against the others: the others
+   *  stay on the moment shown, this camera's picture moves. */
+  const shiftAlign = (ms: number) => {
+    const path = align.camera;
+    const p = alignPlayer();
+    const w = currentWall();
+    if (!path || !p || w === null) return;
+    // the reference clock must be another camera, or the shift moves everything
+    const ref = visiblePaths().find((c) => c !== path && players.current[c]);
+    if (ref) master.current = ref;
+    const next = currentOffset(path) + ms;
+    drafts.current[path] = next;
+    p.setOffset(next);
+    setDraftTick((x) => x + 1);
+    pause();
+    seekWall(w, false);
+  };
+  const saveAlign = async () => {
+    const path = align.camera;
+    if (!path) return;
+    setAlign((a) => ({ ...a, busy: true, msg: undefined }));
+    try {
+      const res = await fetch("/api/replay/offset", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ court: court.slug, camera: path, offsetMs: currentOffset(path) }),
+      });
+      const data = (await res.json()) as { offsetMs?: number; error?: string };
+      if (!res.ok) throw new Error(data.error ?? res.statusText);
+      delete drafts.current[path];
+      await refreshInfo();
+      setAlign((a) => ({ ...a, busy: false, msg: `Saved: ${((data.offsetMs ?? 0) / 1000).toFixed(3)} s` }));
+    } catch (e) {
+      setAlign((a) => ({ ...a, busy: false, msg: `Not saved: ${(e as Error).message}` }));
+    }
+  };
+  const resetAlign = () => {
+    const path = align.camera;
+    const p = alignPlayer();
+    if (!path || !p) return;
+    delete drafts.current[path];
+    p.setOffset(savedOffset(path));
+    setDraftTick((x) => x + 1);
+    const w = currentWall();
+    if (w !== null) seekWall(w, false);
+  };
+  const openAlign = () => {
+    pause();
+    const first =
+      here.find((c) => (c.group ?? "var") === "detector" && players.current[c.path]) ?? here[1] ?? here[0];
+    setAlign({ open: true, camera: first?.path ?? "" });
   };
 
   // ---- the bar ----
@@ -546,7 +655,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
       for (const cam of cams) {
         const p = players.current[cam.path];
         if (!p) continue;
-        const shown = focusRef.current === "all" || focusRef.current === cam.path;
+        const shown = shownIn(focusRef.current, cam);
         p.setLoading(!document.hidden && shown);
         if (document.hidden) p.video.pause();
       }
@@ -584,10 +693,16 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
   const ready = wall !== null;
   const anyRecording = Object.values(info).some((c) => c.segments > 0);
 
-  const gridClass =
-    focus === "all"
-      ? "portrait:grid-rows-2 portrait:grid-cols-1 landscape:grid-cols-2 landscape:grid-rows-1"
-      : "grid-cols-1 grid-rows-1";
+  const here = cams.filter((c) => isHere(c, info));
+  const groups = [...new Set(here.map((c) => c.group ?? "var"))];
+  // a focused camera that is no longer in the buffer: show everything instead
+  const focusNow = here.some((c) => shownIn(focus, c)) ? focus : "all";
+  const shownCams = here.filter((c) => shownIn(focusNow, c));
+  const gridClass = gridFor(shownCams.length);
+  // (draftTick changes with every Align nudge, so these numbers re-render)
+  const alignFps = fpsOf(align.camera);
+  const alignOff = align.camera && draftTick >= 0 ? currentOffset(align.camera) : 0;
+  const alignUnsaved = align.camera ? drafts.current[align.camera] !== undefined : false;
 
   const seg = (active: boolean) =>
     ({
@@ -617,25 +732,61 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
         >
           {ui.until ? `until ${fmtClock(ui.until)}` : anyRecording ? "loading" : "no recording"}
         </span>
-        {cams.length > 1 && (
-          <div className="flex gap-1 basis-full sm:basis-auto sm:ml-auto">
+        {here.length > 1 && (
+          <div className="flex gap-1 basis-full sm:basis-auto sm:ml-auto items-center">
             <button
               className="!text-xs !min-h-8 px-2 flex-1 sm:flex-none whitespace-nowrap"
-              style={seg(focus === "all")}
+              style={seg(focusNow === "all")}
               onClick={() => setFocus("all")}
             >
-              Both
+              {here.length === 2 ? "Both" : "All"}
             </button>
-            {cams.map((cam) => (
-              <button
-                key={cam.path}
-                className="!text-xs !min-h-8 px-2 flex-1 sm:flex-none min-w-0 truncate"
-                style={seg(focus === cam.path)}
-                onClick={() => setFocus(cam.path)}
+            {groups.length > 1 &&
+              groups.map((g) => (
+                <button
+                  key={g}
+                  className="!text-xs !min-h-8 px-2 flex-1 sm:flex-none whitespace-nowrap"
+                  style={seg(focus === `group:${g}`)}
+                  onClick={() => setFocus(`group:${g}`)}
+                >
+                  {g === "var" ? "VAR" : "Detector"}
+                </button>
+              ))}
+            {here.length === 2 ? (
+              here.map((cam) => (
+                <button
+                  key={cam.path}
+                  className="!text-xs !min-h-8 px-2 flex-1 sm:flex-none min-w-0 truncate"
+                  style={seg(focus === cam.path)}
+                  onClick={() => setFocus(cam.path)}
+                >
+                  {cam.label}
+                </button>
+              ))
+            ) : (
+              <select
+                aria-label="show one camera"
+                className="!text-xs !min-h-8 px-1 flex-1 sm:flex-none min-w-0 rounded"
+                style={seg(here.some((c) => c.path === focus))}
+                value={here.some((c) => c.path === focus) ? focus : ""}
+                onChange={(e) => e.target.value && setFocus(e.target.value)}
               >
-                {cam.label}
-              </button>
-            ))}
+                <option value="">One camera…</option>
+                {here.map((cam) => (
+                  <option key={cam.path} value={cam.path}>
+                    {cam.label}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              className="!text-xs !min-h-8 px-2 whitespace-nowrap"
+              style={seg(align.open)}
+              onClick={() => (align.open ? setAlign((a) => ({ ...a, open: false })) : openAlign())}
+              title="Line a camera up with the others"
+            >
+              Align
+            </button>
           </div>
         )}
       </div>
@@ -643,6 +794,61 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
       {(infoError || engine === null) && (
         <div className="shrink-0 text-sm px-3 py-1.5" style={{ background: "#3b1114", color: "#fca5a5" }}>
           {engine === null ? "This browser cannot play the replay stream." : infoError}
+        </div>
+      )}
+
+      {align.open && (
+        <div
+          className="shrink-0 flex flex-wrap items-center gap-1.5 px-2 sm:px-3 py-1.5 text-sm"
+          style={{ borderBottom: "1px solid var(--line)", background: "var(--panel)" }}
+        >
+          <span className="text-xs" style={{ color: "var(--muted)" }}>
+            Pause on a clear moment (the ball hitting the floor or the glass), then move this camera until it shows
+            the same moment as the others:
+          </span>
+          <select
+            aria-label="camera to align"
+            className="!text-xs !min-h-8 px-1 rounded"
+            value={align.camera}
+            onChange={(e) => setAlign((a) => ({ ...a, camera: e.target.value, msg: undefined }))}
+          >
+            {here.map((cam) => (
+              <option key={cam.path} value={cam.path}>
+                {cam.label}
+              </option>
+            ))}
+          </select>
+          {[-1000, -100].map((d) => (
+            <button key={d} className="!text-xs !min-h-8 px-2" onClick={() => shiftAlign(d)}>
+              {d / 1000} s
+            </button>
+          ))}
+          <button className="!text-xs !min-h-8 px-2" onClick={() => shiftAlign(-1000 / alignFps)} title="one frame earlier">
+            − frame
+          </button>
+          <span className="font-mono text-xs tabular-nums px-1">
+            {(alignOff / 1000).toFixed(3)} s{alignUnsaved ? " (not saved)" : ""}
+          </span>
+          <button className="!text-xs !min-h-8 px-2" onClick={() => shiftAlign(1000 / alignFps)} title="one frame later">
+            + frame
+          </button>
+          {[100, 1000].map((d) => (
+            <button key={d} className="!text-xs !min-h-8 px-2" onClick={() => shiftAlign(d)}>
+              +{d / 1000} s
+            </button>
+          ))}
+          <button
+            className="!text-xs !min-h-8 px-2 font-semibold"
+            style={{ background: "var(--accent-2)", color: "#03200f", border: "none" }}
+            disabled={!alignUnsaved || align.busy}
+            onClick={() => void saveAlign()}
+          >
+            {align.busy ? "Saving…" : "Save for everyone"}
+          </button>
+          <button className="!text-xs !min-h-8 px-2" disabled={!alignUnsaved} onClick={resetAlign}>
+            Undo
+          </button>
+          {align.msg && <span className="text-xs">{align.msg}</span>}
         </div>
       )}
 
@@ -654,7 +860,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
           return (
             <div
               key={cam.path}
-              className={`relative min-h-0 rounded-lg overflow-hidden ${focus === "all" || focus === cam.path ? "" : "hidden"}`}
+              className={`relative min-h-0 rounded-lg overflow-hidden ${shownIn(focusNow, cam) && isHere(cam, info) ? "" : "hidden"}`}
               style={{ background: "#000", border: "1px solid var(--line)" }}
             >
               <ZoomPan className="w-full h-full">
@@ -673,6 +879,8 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
               </ZoomPan>
               <div className="absolute left-2 top-2 text-xs px-2 py-1 rounded bg-black/60 pointer-events-none">
                 {cam.label}
+                {cam.fps > 30 ? ` · ${cam.fps} fps` : ""}
+                {align.open && align.camera === cam.path ? " · aligning" : ""}
               </div>
               {t.kind !== "ok" ? (
                 <div

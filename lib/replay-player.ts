@@ -70,7 +70,11 @@ export class CameraPlayer {
   private pending: number | null = null;
   private inflight: number | null = null;
   private loading = true;
-  private rangesCache: { key: unknown; ranges: WallRange[] } | null = null;
+  private rangesCache: { key: unknown; off: number; ranges: WallRange[] } | null = null;
+  /** This camera's clock correction (ms, lib/offsets.ts): added to every
+   *  recorded time, so cameras of different systems show the same moment.
+   *  Every wall-clock value this class returns or takes is on the court clock. */
+  offsetMs = 0;
   /** Where the player was told to open (video time), until it is there.
    *  Before that the element sits at 0 -- the oldest moment of the buffer --
    *  and must not be taken for the position on screen. */
@@ -161,6 +165,13 @@ export class CameraPlayer {
     hls.loadSource(url);
   }
 
+  /** A new correction (the Align panel, or someone else's save). */
+  setOffset(ms: number) {
+    if (ms === this.offsetMs) return;
+    this.offsetMs = ms;
+    this.rangesCache = null;
+  }
+
   destroy() {
     this.disposed = true;
     this.video.removeEventListener("seeked", this.onSeeked);
@@ -212,19 +223,20 @@ export class CameraPlayer {
   wallAt(t: number): number | null {
     if (this.engine === "native") {
       const d = this.startDate();
-      return d === null ? null : d + t * 1000;
+      return d === null ? null : d + t * 1000 + this.offsetMs;
     }
     const fs = this.fragments();
     const i = lastWhere(fs, (f) => f.start <= t + 1e-4);
     if (i < 0) return null;
     const f = fs[i];
     if (f.programDateTime === null) return null;
-    return f.programDateTime + (t - f.start) * 1000;
+    return f.programDateTime + (t - f.start) * 1000 + this.offsetMs;
   }
 
   /** Video time showing wall-clock moment `ms`. Null when this camera
    *  recorded nothing then; with `snap`, the next moment it did record. */
   timeAt(ms: number, snap = false): number | null {
+    ms -= this.offsetMs; // court clock -> this camera's recorded clock
     if (this.engine === "native") {
       const d = this.startDate();
       if (d === null) return null;
@@ -254,7 +266,7 @@ export class CameraPlayer {
     }
     const fs = this.fragments();
     const f = fs[fs.length - 1];
-    return f && f.programDateTime !== null ? f.programDateTime + f.duration * 1000 : null;
+    return f && f.programDateTime !== null ? f.programDateTime + f.duration * 1000 + this.offsetMs : null;
   }
 
   /** Recorded spans (ms) according to the playlist. */
@@ -270,17 +282,19 @@ export class CameraPlayer {
       return out;
     }
     const d = this.hls?.levels?.[0]?.details;
-    if (this.rangesCache && this.rangesCache.key === d) return this.rangesCache.ranges;
+    if (this.rangesCache && this.rangesCache.key === d && this.rangesCache.off === this.offsetMs) {
+      return this.rangesCache.ranges;
+    }
     const out: WallRange[] = [];
     for (const f of this.fragments()) {
       if (f.programDateTime === null) continue;
-      const a = f.programDateTime;
+      const a = f.programDateTime + this.offsetMs;
       const b = a + f.duration * 1000;
       const last = out[out.length - 1];
       if (last && a - last[1] < 1000) last[1] = Math.max(last[1], b);
       else out.push([a, b]);
     }
-    this.rangesCache = { key: d, ranges: out };
+    this.rangesCache = { key: d, off: this.offsetMs, ranges: out };
     return out;
   }
 
