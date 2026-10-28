@@ -20,7 +20,7 @@ function Heading() {
 
 export default async function ClipsPage() {
   const frame = (children: React.ReactNode) => (
-    <div className="stage min-h-[calc(100dvh-var(--app-header))]">
+    <div className="stage min-h-[calc(100dvh-var(--chrome-top))]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6 sm:space-y-8">{children}</div>
     </div>
   );

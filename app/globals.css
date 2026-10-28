@@ -2,6 +2,9 @@
 
 /* a phone on its side: little height, the header is hidden (below) */
 @custom-variant short (@media (max-height: 520px) and (orientation: landscape));
+/* a mouse or trackpad somewhere (desk PC, iPad with a keyboard case):
+   keyboard hints only make sense there */
+@custom-variant desk (@media (any-pointer: fine));
 
 /* Padel Center Baku brand (padelcenter.az, studied 2026-10-28): near-black,
    the lime of their buttons, the deep green of their wordmark and the ball's
@@ -31,6 +34,33 @@
   --display: var(--font-bebas), Impact, "Arial Narrow", sans-serif;
   /* height of the app header; the replay and live pages fill the rest */
   --app-header: 3.5rem;
+  /* the iPhone status bar when the site runs full screen from the home
+     screen (0 in the browser); the header grows by it */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --chrome-top: calc(var(--app-header) + var(--safe-top));
+  /* the camera pictures never shrink below this (they grow into any room
+     the controls leave) */
+  --tiles-min: clamp(140px, 38dvh, 520px);
+}
+
+/* small phones upright (iPhone SE, a browser with its bars): the pictures
+   give way before the controls do */
+@media (max-height: 700px) and (orientation: portrait) {
+  :root {
+    --tiles-min: clamp(120px, 26dvh, 520px);
+  }
+}
+
+/* narrow phones (320-400 px): the replay's button rows must fit the width,
+   or the whole console slides sideways */
+@media (max-width: 400px) {
+  .controls-row button {
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+  }
+  .controls-row .play-btn {
+    min-width: 3rem;
+  }
 }
 
 /* Phones: a shorter header and 40 px controls, still a comfortable thumb
@@ -39,9 +69,10 @@
   :root {
     --app-header: 3rem;
   }
-  button,
-  select,
-  input:not([type="range"]):not([type="checkbox"]) {
+  /* (:root: these must beat the 44 px rule further down) */
+  :root button,
+  :root select,
+  :root input:not([type="range"]):not([type="checkbox"]) {
     min-height: 40px;
   }
 }
@@ -51,6 +82,13 @@
 @media (max-height: 520px) and (orientation: landscape) {
   :root {
     --app-header: 0px;
+    --tiles-min: clamp(100px, 30dvh, 520px);
+  }
+  /* 36 px controls: everything (pictures, incident strip, bar, buttons)
+     has to share 340-380 px of height */
+  :root button,
+  :root select {
+    min-height: 36px;
   }
   .app-header {
     display: none !important;
@@ -78,6 +116,23 @@
   .controls-row .play-btn {
     min-width: 3.5rem;
   }
+  .controls-row button {
+    min-width: 2.25rem;
+  }
+}
+
+/* the notch and the rounded corners of a phone on its side */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+/* the replay console never slides sideways (a focused control used to
+   scroll it on a narrow phone) */
+.console {
+  overflow-x: hidden;
+}
+a {
+  touch-action: manipulation;
 }
 
 html,
@@ -714,6 +769,10 @@ input[type="checkbox"] {
 .sheet {
   animation: sheet-up 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) both;
   background: rgba(16, 20, 17, 0.94);
+  /* never taller than the screen: on a phone on its side it scrolls */
+  max-height: calc(100dvh - 0.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 @keyframes sheet-up {
   from {

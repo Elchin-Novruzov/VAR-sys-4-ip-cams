@@ -149,7 +149,7 @@ export function Scrubber({
             <button
               key={z.label}
               onClick={() => chooseSpan(z.ms)}
-              className="seg !min-h-7 !text-xs px-2 !rounded-full whitespace-nowrap"
+              className="seg !min-h-8 short:!min-h-7 !text-xs px-2 !rounded-full whitespace-nowrap"
               aria-pressed={z.ms === selected}
             >
               {z.label}
@@ -197,7 +197,7 @@ export function Scrubber({
           aria-valuemax={to}
           aria-valuenow={head ?? undefined}
           aria-valuetext={head !== null ? fmtClock(head) : undefined}
-          className="relative h-11 sm:h-12 rounded-lg overflow-hidden touch-none cursor-pointer"
+          className="relative h-11 sm:h-12 short:!h-9 rounded-lg overflow-hidden touch-none cursor-pointer"
           style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
           onPointerDown={down}
           onPointerMove={move}

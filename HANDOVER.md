@@ -22,12 +22,15 @@ anything at the club.
 | cameras | two court cameras, relayed from the club since 2026-09-04 by a PC at the club (scheduled task, survives reboots) |
 | replay | one continuous timeline per camera over the last 4 h (§4) |
 | **detector cameras** (2026-10-26; deployed `baa7111` + MediaMTX recreated; first camera `court1-det-local` recorded the same day) | the in/out system's high-speed cameras as extra angles: the detector PC pushes them while it runs (`live_multi.py run --var`), they record and replay like the club's cameras, a per-camera clock offset lines both systems up (Align, §4 "Several camera systems"). Tested end to end on the dev PC; ship with §7. |
-| **look** (2026-10-28; first round exported as public `96587c3`; the VAR review round on top, see below) | rebranded as **Padel Center Baku**: the club's colours (near-black, lime `#ceff65`, green `#235834`, ball yellow), its logo and its heading face (Bebas Neue, with Inter), a brand login page and courts page with moving parts. The replay console only changed colour and icons; the phone audit passes with the 2026-10-21 numbers. Details: COMMIT_LOG 2026-10-28, "Look and brand" in §9. |
+| **look** (2026-10-28; exported as public `503026f` with the VAR review round, waiting for the owner's deploy) | rebranded as **Padel Center Baku**: the club's colours (near-black, lime `#ceff65`, green `#235834`, ball yellow), its logo and its heading face (Bebas Neue, with Inter), a brand login page and courts page with moving parts. The replay console only changed colour and icons; the phone audit passes with the 2026-10-21 numbers. Details: COMMIT_LOG 2026-10-28, "Look and brand" in §9. |
 | **open check** | `/api/health` on 2026-10-25 15:00 showed `"recordings": {"dir": "/recordings", "cameras": {}}` — the site sees the recordings folder, but it was empty. MediaMTX deletes camera folders once the last file is older than 4 h, so this most likely means **the cameras had not streamed for 4 h** (a Sunday; club PC or relay off). It can also mean the volume is mounted wrong. §8 "Replay shows nothing" has the two-minute check. Not verified yet: the new replay page with the real cameras. |
 
 ## 2. What it does (for the people using it)
 
-A referee or player at the court opens the site on a phone or tablet:
+A referee or player at the court opens the site on a phone or tablet. The
+header has four tabs, **Courts / Replay / Live / Clips** (icons on a phone,
+the open one named; names from a tablet up); with one court, Replay and
+Live open it directly.
 
 - **Courts** page, the "control room" (2026-10-28): an on-air panel (court
   clock in Baku time, streaming cameras), each court with its cameras and
@@ -407,6 +410,29 @@ the ball on black.
   `10s`, `−10`, `1×`, `1m`): keep those when restyling.
 - Viewer-facing text keeps the framing: replay for disputes, never line
   calling.
+
+### Phones and iPads (2026-10-28)
+
+Checked with `scripts/checks/responsive-audit.mjs` on 18 device profiles,
+every page, upright and on their side: 180 checks, no sideways scroll,
+nothing cut off, the replay console and the save sheet always on screen.
+The pieces that make it hold, all in `globals.css`:
+
+- `--chrome-top` = header + `env(safe-area-inset-top)`: pages that fill the
+  screen use `calc(100dvh - var(--chrome-top))`, so the home-screen app on
+  an iPhone (status bar over the page) keeps its header. The body pads
+  `safe-area-inset-left/right` (a notched phone on its side).
+- `--tiles-min`: the pictures' floor (38dvh; 26dvh on short upright phones;
+  30dvh on a phone on its side). They grow into whatever the controls leave.
+- Variants: `short:` (on its side, ≤ 520 px high: no header, 36 px
+  controls, one sliding control row, a single speed button that cycles,
+  ±1 s and the timeline toggle hidden, two-column save sheet), `desk:` (a
+  mouse or trackpad is present: keyboard hints and the shortcut card only
+  then, so a touch-only iPad does not show them), `max-[359px]:` (the
+  320 px iPhone SE hides ±1 s and the timeline toggle), and under 400 px the
+  replay buttons lose some padding.
+- The replay console has `overflow-x: hidden`: a focused button can no
+  longer slide it sideways on a narrow phone.
 
 ## 10. Known limits and open items
 

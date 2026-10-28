@@ -5,6 +5,62 @@ as `padel_analytics/inout/COMMIT_LOG.md`.
 
 ---
 
+## 2026-10-28 — Phones and iPads: 18 device profiles, every page fits; Replay and Live in the header
+
+The owner: make it phone friendly and iPad friendly; and add pages for live
+and replay (read as: Replay and Live in the navigation, next to Courts and
+Clips).
+
+**Measured first.** `scripts/checks/responsive-audit.mjs` (new) loads every
+page on Playwright's device profiles -- iPhone SE (320×568), SE 3rd gen,
+iPhone 13 (390×664: the real visible area with Safari's bars, much shorter
+than the 844 used before), 15 Pro Max, Galaxy S8, Pixel 7, all four on
+their side, iPad mini / Air / Pro 11 / Pro 12.9 both ways -- with touch
+and mobile emulation, and flags sideways scroll, content cut off by its own
+box, the replay console taller than the screen, the save sheet off screen,
+tap targets under 32 px. First run: 15 of 180 checks failed, all phones:
+
+- under ~390 px the replay button groups were wider than the screen and the
+  whole console slid sideways (a tap on Mark scrolled it);
+- on a phone on its side the incident strip pushed the buttons 5–38 px
+  below the screen and the save sheet ran 59–97 px off it;
+- on the 320 px phone the courts card's instant-replay row was cut off.
+
+**Fixes** (`globals.css` unless said):
+
+- Header: four tabs **Courts / Replay / Live / Clips** (`NavLinks`, the lime
+  pill slides between them); icons on a phone with the open one named,
+  names from 768 px. With one court Replay and Live open it directly. The
+  VAR tag shows from 400 px, the e-mail from 1280 px; logo and sign-out are
+  40 px targets.
+- Narrow phones: under 400 px the replay buttons lose padding; under 360 px
+  ±1 s and the timeline toggle hide (frame steps and ±10 stay). The console
+  is `overflow-x: hidden`.
+- Phone on its side (`short:`): 36 px controls, the four speeds become one
+  button that cycles, ±1 s and the timeline toggle hide, a 36 px bar, the
+  pictures may go down to 30dvh, the save sheet goes two columns.
+- `--tiles-min` replaces the inline picture floor (26dvh on short upright
+  phones).
+- Save sheet: never taller than the screen (`max-height`, scrolls inside).
+- iPhone safe areas: `--chrome-top` (header + `env(safe-area-inset-top)`)
+  for the home-screen app's status bar, body side padding for the notch.
+- iPad: keyboard hints and the shortcut card only with a mouse or trackpad
+  present (`desk:` = `any-pointer: fine`).
+- Incident-strip buttons 36 px; courts card's instant-replay row wraps.
+- Live tiles: a camera that is not streaming said
+  "networkError: manifestLoadError" and stayed dead until a reload. Now
+  "This camera is not streaming right now", retried every 5 s; a camera
+  started later played in 13.5 s without a reload (scratch MediaMTX, its
+  record path in a temp folder; the test footage untouched).
+
+**Verified**: final audit 180 checks, 0 problems (left as notes: the
+remember-me checkbox, whose whole label row is the target, and the 28 px
+zoom chips on a phone on its side). Phone replay audit: all passed, same
+numbers. Review check at 390×844: rock, loop, save as before. Typecheck,
+lint, `pnpm build` clean. `review-check.mjs` and `live-sync-check.mjs`
+(the earlier scratch tests) are now in `scripts/checks/` with a README
+section on running live tests safely.
+
 ## 2026-10-28 — VAR review (mark, rock, loop), "save the moment", live sync, the control room
 
 The owner, after the rebrand: more moving parts and new sections on the main
@@ -85,8 +141,11 @@ MediaMTX (`record: no`, recordPath in a temp folder; the test footage
 untouched, 1052 files) and two looped streams copied without re-encoding
 (CPU < 10 %): 15–20 ms apart at rest; one tile knocked 1 s back caught in
 ~4 s; 3.5 s back caught in one jump (2–12 ms). Courts page screenshots at
-1440×900 and 390×844, on air and off air; no horizontal scroll. Not
-deployed yet.
+1440×900 and 390×844, on air and off air; no horizontal scroll.
+
+**Exported** as public `503026f` (= padel-full e71b1eb, on top of 96587c3, no
+Mac commits; secret scan: placeholders only). `infra/` unchanged: the normal
+deploy line, no MediaMTX recreate. **Not deployed** until the owner runs it.
 
 ## 2026-10-28 — Rebranded as Padel Center Baku: the club's colours, logo and type, a brand front door
 

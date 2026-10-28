@@ -95,6 +95,11 @@ Invariants that span files:
   640 px); short-landscape phones hide the header (`.app-header`) and keep
   the replay controls on one line (`.controls-row`). New controls inherit
   this — don't hardcode heights.
+- Full-screen pages subtract `var(--chrome-top)` (header + iPhone status
+  bar), not `--app-header`; the replay pictures' floor is `--tiles-min`.
+  Phone/iPad rules use the `short:`, `desk:` and `max-[359px]:` variants
+  (HANDOVER §9 "Phones and iPads"); run `scripts/checks/responsive-audit.mjs`
+  after any layout change.
 - The look is **Padel Center Baku**'s brand (since 2026-10-28): colours are
   the tokens in `globals.css` `:root` (no new hex values in components),
   headings `.display` (Bebas Neue), buttons `.btn-accent` / `.btn-brand` /

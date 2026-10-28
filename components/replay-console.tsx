@@ -933,7 +933,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
   const alignUnsaved = align.camera ? drafts.current[align.camera] !== undefined : false;
 
   return (
-    <div className="console flex flex-col overflow-y-auto select-none" style={{ height: "calc(100dvh - var(--app-header))" }}>
+    <div className="console flex flex-col overflow-y-auto select-none" style={{ height: "calc(100dvh - var(--chrome-top))" }}>
       {/* top strip: name, clock and status on one row; on narrow screens the
           camera switch wraps to its own full-width row with equal buttons */}
       <div
@@ -1097,7 +1097,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
 
       {/* cameras: grow to fill, but never collapse below a usable height;
           if the controls need more room than the screen has, the page scrolls */}
-      <div className={`relative flex-1 grid gap-1 p-1 ${gridClass}`} style={{ minHeight: "clamp(140px, 38dvh, 520px)" }}>
+      <div className={`tiles relative flex-1 grid gap-1 p-1 ${gridClass}`} style={{ minHeight: "var(--tiles-min)" }}>
         {/* broadcast overlays: out of the grid flow (absolute), never in the way of a finger */}
         {stinger && (
           <div key={stinger.key} className="stinger" aria-live="polite">
@@ -1202,17 +1202,17 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
         {shownMarks.length > 0 && (
           // the incident strip: step through marked moments and review one
           <div className="controls-row no-scrollbar flex items-center gap-1 text-sm overflow-x-auto">
-            <span className={`pill ${reviewMode ? "pill-live" : "pill-quiet"} !py-1`}>
+            <span className={`pill ${reviewMode ? "pill-live" : "pill-quiet"} !py-1 max-[399px]:!hidden`}>
               <Flag className="h-3 w-3" aria-hidden />
               <span className="tabular-nums">
                 {markIndex >= 0 ? markIndex + 1 : "–"}/{shownMarks.length}
               </span>
             </span>
-            <button className="!min-h-8 !px-1.5" onClick={() => shiftMark(-1)} disabled={markIndex <= 0} aria-label="previous incident" title="previous incident ([)">
+            <button className="!min-h-9 !min-w-9 !px-1.5" onClick={() => shiftMark(-1)} disabled={markIndex <= 0} aria-label="previous incident" title="previous incident ([)">
               <ChevronLeft className="icon" aria-hidden />
             </button>
             <button
-              className="!min-h-8 !px-2 font-semibold tabular-nums"
+              className="!min-h-9 !px-2 font-semibold tabular-nums"
               onClick={() => activeMark !== null && goToMark(activeMark)}
               disabled={activeMark === null}
               title="go to this incident"
@@ -1220,7 +1220,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
               {activeMark !== null ? `${fmtClock(activeMark)}.${centis(activeMark)}` : "pick one"}
             </button>
             <button
-              className="!min-h-8 !px-1.5"
+              className="!min-h-9 !min-w-9 !px-1.5"
               onClick={() => shiftMark(1)}
               disabled={markIndex >= shownMarks.length - 1}
               aria-label="next incident"
@@ -1230,7 +1230,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
             </button>
             <span className="flex-1" />
             <button
-              className="seg !min-h-8 !px-2 inline-flex items-center gap-1"
+              className="seg !min-h-9 !min-w-9 !px-2 inline-flex items-center gap-1"
               aria-pressed={reviewMode === "loop"}
               aria-label="Loop"
               onClick={() => toggleReview("loop")}
@@ -1241,7 +1241,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
               <span className="hidden sm:inline">Loop</span>
             </button>
             <button
-              className="seg !min-h-8 !px-2 inline-flex items-center gap-1"
+              className="seg !min-h-9 !min-w-9 !px-2 inline-flex items-center gap-1"
               aria-pressed={reviewMode === "rock"}
               aria-label="Rock"
               onClick={() => toggleReview("rock")}
@@ -1251,7 +1251,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
               <ArrowLeftRight className="icon" aria-hidden />
               <span className="hidden sm:inline">Rock</span>
             </button>
-            <button className="!min-h-8 !px-1.5" onClick={removeMark} disabled={activeMark === null} aria-label="remove incident" title="remove this incident">
+            <button className="!min-h-9 !min-w-9 !px-1.5" onClick={removeMark} disabled={activeMark === null} aria-label="remove incident" title="remove this incident">
               <X className="icon" aria-hidden />
             </button>
           </div>
@@ -1278,7 +1278,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
             <button onClick={() => nudge(-10)} disabled={!ready} title="back ten seconds (J)" className="tabular-nums">
               −10
             </button>
-            <button onClick={() => nudge(-1)} disabled={!ready} title="back one second (Shift+←)">
+            <button onClick={() => nudge(-1)} disabled={!ready} title="back one second (Shift+←)" className="max-[359px]:!hidden short:!hidden">
               −1s
             </button>
             <button onClick={() => step(-1)} disabled={!ready} title="back one frame (←)" aria-label="back one frame">
@@ -1303,7 +1303,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
             <button onClick={() => step(1)} disabled={!ready} title="forward one frame (→)" aria-label="forward one frame">
               <StepForward className="icon" aria-hidden />
             </button>
-            <button onClick={() => nudge(1)} disabled={!ready} title="forward one second (Shift+→)">
+            <button onClick={() => nudge(1)} disabled={!ready} title="forward one second (Shift+→)" className="max-[359px]:!hidden short:!hidden">
               +1s
             </button>
             <button onClick={() => nudge(10)} disabled={!ready} title="forward ten seconds (L)" className="tabular-nums">
@@ -1347,13 +1347,24 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
 
           <div className="flex items-center gap-1">
             {SPEEDS.map((s) => (
-              <button key={s} onClick={() => changeRate(s)} disabled={!ready} className="seg text-sm" aria-pressed={rate === s}>
+              <button key={s} onClick={() => changeRate(s)} disabled={!ready} className="seg text-sm short:!hidden" aria-pressed={rate === s}>
                 {s}×
               </button>
             ))}
+            {/* a phone on its side: one button that steps through the speeds */}
+            <button
+              onClick={() => changeRate(SPEEDS[(SPEEDS.indexOf(rate as (typeof SPEEDS)[number]) + 1) % SPEEDS.length])}
+              disabled={!ready}
+              className="seg text-sm hidden short:!inline-flex items-center tabular-nums"
+              aria-pressed={rate !== 1}
+              aria-label={`speed ${rate}×, tap for the next`}
+              title="Speed: tap for the next"
+            >
+              {rate}×
+            </button>
             <button
               onClick={() => setScrubVisible((v) => !v)}
-              className="text-sm ml-1"
+              className="text-sm ml-1 max-[359px]:!hidden short:!hidden"
               title="show or hide the timeline"
               aria-label="timeline"
               aria-pressed={scrubVisible}
@@ -1378,7 +1389,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
             Could not save: {save.msg}
           </div>
         )}
-        <p className="text-xs hidden md:block short:!hidden" style={{ color: "var(--muted)" }}>
+        <p className="text-xs hidden md:desk:block short:!hidden" style={{ color: "var(--muted)" }}>
           Drag the bar to any moment (All / 30m / 5m / 1m zooms it) · Space or K: play or pause · J / L: ten
           seconds · ← →: one frame · Shift + ← →: one second · M: mark an incident · O: loop it · R: rock it back and
           forth · [ ]: previous / next incident · S: save · Ctrl + scroll, pinch or the + − buttons to zoom · drag to

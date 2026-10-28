@@ -4,44 +4,49 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { PointerEvent, ReactNode } from "react";
 import { motion, useMotionTemplate, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
+import { Clapperboard, History, LayoutGrid, Radio } from "lucide-react";
 import { Ball } from "./brand";
 
 /** The interactive pieces of the brand pages (motion). Kept out of the
  *  replay console on purpose: nothing here runs while someone is scrubbing. */
 
-const LINKS = [
-  { href: "/courts", label: "Courts" },
-  { href: "/clips", label: "Clips" },
-];
-
-/** Header navigation; the lime pill slides to the page you open. */
-export function NavLinks() {
+/** Header navigation: Courts, Replay, Live, Clips. The lime pill slides to
+ *  the page you open. On a phone the tabs are icons and only the open one
+ *  spells its name; from a tablet up every tab has its name. Replay and Live
+ *  go straight to the court when the club has one, else to the court list. */
+export function NavLinks({ replayHref, liveHref }: { replayHref: string; liveHref: string }) {
   const path = usePathname();
+  const links = [
+    { href: "/courts", label: "Courts", Icon: LayoutGrid, on: path === "/courts" },
+    { href: replayHref, label: "Replay", Icon: History, on: /^\/courts\/[^/]+$/.test(path) },
+    { href: liveHref, label: "Live", Icon: Radio, on: /^\/courts\/[^/]+\/live$/.test(path) },
+    { href: "/clips", label: "Clips", Icon: Clapperboard, on: path === "/clips" || path.startsWith("/clips/") },
+  ];
   return (
-    <nav className="flex items-center gap-0.5">
-      {LINKS.map((l) => {
-        const on = path === l.href || path.startsWith(`${l.href}/`);
-        return (
-          <Link
-            key={l.href}
-            href={l.href}
-            aria-current={on ? "page" : undefined}
-            className={`relative flex items-center min-h-9 px-3 rounded-full display text-[1.15rem] sm:text-[1.25rem] pt-0.5 transition-colors ${
-              on ? "text-[var(--on-accent)]" : "hover:text-[var(--accent)]"
-            }`}
-          >
-            {on && (
-              <motion.span
-                layoutId="nav-active"
-                className="absolute inset-0 rounded-full"
-                style={{ background: "var(--accent)" }}
-                transition={{ type: "spring", stiffness: 520, damping: 40 }}
-              />
-            )}
-            <span className="relative">{l.label}</span>
-          </Link>
-        );
-      })}
+    <nav className="flex items-center gap-0.5 min-w-0">
+      {links.map(({ href, label, Icon, on }) => (
+        <Link
+          key={label}
+          href={href}
+          aria-current={on ? "page" : undefined}
+          aria-label={label}
+          title={label}
+          className={`relative flex items-center gap-1.5 min-h-10 px-2.5 sm:px-3 rounded-full display text-[1.15rem] sm:text-[1.25rem] transition-colors ${
+            on ? "text-[var(--on-accent)]" : "hover:text-[var(--accent)]"
+          }`}
+        >
+          {on && (
+            <motion.span
+              layoutId="nav-active"
+              className="absolute inset-0 rounded-full"
+              style={{ background: "var(--accent)" }}
+              transition={{ type: "spring", stiffness: 520, damping: 40 }}
+            />
+          )}
+          <Icon className="relative h-4 w-4 shrink-0" aria-hidden strokeWidth={2.4} />
+          <span className={`relative pt-0.5 ${on ? "" : "hidden md:inline"}`}>{label}</span>
+        </Link>
+      ))}
     </nav>
   );
 }

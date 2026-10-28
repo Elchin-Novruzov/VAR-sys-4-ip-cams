@@ -25,6 +25,9 @@ const SYNC_EVERY_MS = 500;
 /** Reads as "In sync" up to this spread; the easing starts well below it. */
 const SYNC_OK_MS = 120;
 const SYNC_EASE_MS = 40;
+/** A tile whose camera is not streaming asks again this often. */
+const LIVE_RETRY_MS = 5000;
+const NO_HLS = "This browser cannot play the live stream.";
 const SYNC_JUMP_MS = 2500;
 
 /** Live view over the proxied HLS stream: hls.js, or the browser's own HLS
@@ -54,6 +57,7 @@ export function HlsPlayer({
     if (!video) return;
     let hls: Hls | undefined;
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
 
     const frameDate = (): number | null => {
       let behind: number;
@@ -79,14 +83,32 @@ export function HlsPlayer({
         if (video.canPlayType("application/vnd.apple.mpegurl")) {
           video.src = src;
           await video.play().catch(() => {});
-        } else setErr("This browser cannot play the live stream.");
+        } else setErr(NO_HLS);
         return;
       }
       hls = new HlsCtor({ lowLatencyMode: true, liveSyncDurationCount: 3, backBufferLength: 30 });
+      // a camera that is not streaming (relay off, detector PC away) or
+      // dropped: say so in words and try again every few seconds, so the
+      // tile comes back by itself when the camera does
       hls.on(HlsCtor.Events.ERROR, (_e, data) => {
-        if (data.fatal) setErr(`${data.type}: ${data.details}`);
+        if (!data.fatal) return;
+        const h = hls;
+        if (data.type === HlsCtor.ErrorTypes.MEDIA_ERROR) {
+          h?.recoverMediaError();
+          return;
+        }
+        setErr(
+          data.details.startsWith("manifest")
+            ? "This camera is not streaming right now."
+            : "The live picture dropped. Reconnecting…",
+        );
+        if (retry) clearTimeout(retry);
+        retry = setTimeout(() => {
+          if (!cancelled && h) h.loadSource(src);
+        }, LIVE_RETRY_MS);
       });
       hls.on(HlsCtor.Events.MANIFEST_PARSED, () => {
+        setErr(null);
         void video.play().catch(() => {});
       });
       hls.loadSource(src);
@@ -95,6 +117,7 @@ export function HlsPlayer({
 
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
       clockTo.current?.(null);
       hls?.destroy();
     };
@@ -116,8 +139,9 @@ export function HlsPlayer({
         </div>
       )}
       {err && (
-        <div className="absolute inset-0 grid place-items-center text-sm bg-black/60 p-4 text-center" style={{ color: "var(--danger-text)" }}>
-          {err}
+        <div className="absolute inset-0 grid place-items-center content-center gap-1 text-sm bg-black/60 p-4 text-center pointer-events-none">
+          <span className="muted">{err}</span>
+          {err !== NO_HLS && <span className="text-xs muted opacity-70">Trying again every few seconds</span>}
         </div>
       )}
     </div>
@@ -197,7 +221,7 @@ export function LiveGrid({ court }: { court: CourtConfig }) {
   }, [court.slug]);
 
   return (
-    <div className="flex flex-col overflow-y-auto fade" style={{ height: "calc(100dvh - var(--app-header))" }}>
+    <div className="live-page flex flex-col overflow-y-auto fade" style={{ height: "calc(100dvh - var(--chrome-top))" }}>
       <div className="shrink-0 flex items-center gap-2 px-2 sm:px-3 py-1.5" style={{ borderBottom: "1px solid var(--line)" }}>
         <Link href="/courts" className="grid place-items-center h-9 w-9 rounded-full muted hover:!text-[var(--accent)]" aria-label="back to courts">
           <ChevronLeft className="icon" aria-hidden />
@@ -220,7 +244,7 @@ export function LiveGrid({ court }: { court: CourtConfig }) {
           <span className="hidden sm:inline">Replay</span>
         </Link>
       </div>
-      <div className={`flex-1 grid gap-1 p-1 ${liveGridFor(court.cameras.length)}`} style={{ minHeight: "clamp(200px, 45dvh, 520px)" }}>
+      <div className={`tiles flex-1 grid gap-1 p-1 ${liveGridFor(court.cameras.length)}`} style={{ minHeight: "clamp(200px, 45dvh, 520px)" }}>
         {court.cameras.map((cam) => (
           <div
             key={cam.path}
@@ -249,7 +273,7 @@ export function LiveGrid({ court }: { court: CourtConfig }) {
           paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
         }}
       >
-        <div className="flex items-center gap-1.5">
+        <div className="instant-row flex items-center gap-1.5">
           <span className="eyebrow hidden sm:inline pr-1">Instant replay</span>
           {[10, 30, 60].map((s) => (
             <Link key={s} href={`/courts/${court.slug}?back=${s}`} className="btn btn-accent flex-1 sm:flex-none !min-h-11">

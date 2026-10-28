@@ -8,6 +8,9 @@ headless Chrome. These are the tools behind the 2026-10-21 numbers in
 |---|---|
 | `replay-audit.mjs` | the phone audit: open, far tap, drag back at 1m zoom, −10 ×3, frame steps on both cameras, 10 s of play, slow motion, ⟲ 10s, −1s inside played video, heap, layout. Prints one line per step with OK/FAIL; exit code 1 on any FAIL. |
 | `mint-session.mjs` | a session cookie for a local **production** build (no dev login there). |
+| `responsive-audit.mjs` | (2026-10-28) every page on 18 phone and iPad profiles (Playwright's device list: iPhone SE / SE3 / 13 / 15 Pro Max, Galaxy S8, Pixel 7, upright and on their side; iPad mini, Air, Pro 11, Pro 12.9 both ways). Flags sideways scroll, content cut off by its own box, the replay console taller than the screen, the save sheet off screen; notes tap targets under 32 px and items behind a sideways scroll. `DEVICES=iPhone,iPad PAGES=replay` narrow it, `SHOTS=0` skips screenshots, `OUT` is where they go. |
+| `review-check.mjs` | (2026-10-28) the VAR review on the replay page: `?back=20`, M, R (prints the clock going forward to +1 s and back to −2 s around the mark), Escape, O (the loop wraps), S with a tag. The save POST is answered in the browser, so nothing is cut or stored. `VIEW=390x844` etc. |
+| `live-sync-check.mjs` | (2026-10-28) live sync on the live page: the spread between the tiles at rest, after one tile is knocked 1 s back, and 3.5 s back. Needs a MediaMTX with two cameras publishing — see "Live tests" below. |
 
 ## Running the audit
 
@@ -82,3 +85,26 @@ buffer for testing. **`pnpm mediamtx` uses `infra/mediamtx.yml`, whose
   processes whose command line contains `scripts/sim.ts` or
   `rtmp://127.0.0.1:1935/court1` — and exclude your own PowerShell process,
   whose command line contains the same text.
+
+## Live tests (live sync, a camera coming back)
+
+Never run `pnpm mediamtx` here: it records into `./recordings` and deletes
+the test footage after 4 h. Use a scratch config with recording off and the
+record path in a temp folder:
+
+```
+sed -e 's/record: yes/record: no/' -e 's#recordPath: ./recordings/#recordPath: C:/Temp/mtx-scratch/#' infra/mediamtx.yml > %TEMP%/mtx.yml
+.mediamtx/mediamtx.exe %TEMP%/mtx.yml
+```
+
+and publish looped recording files without re-encoding (a few % CPU):
+
+```
+ffmpeg -re -stream_loop -1 -i recordings/court1-north/<a file>.mp4 -an -c copy -f flv "rtmp://127.0.0.1:1935/court1-north?user=cam&pass=changeme"
+```
+
+(same for court1-south). Run each as its own background job and stop those
+jobs afterwards, never every ffmpeg on the machine: the detector PC's own
+capture runs ffmpeg too. Measured 2026-10-28: 15–20 ms apart at rest, a
+tile 1 s off caught in ~4 s, 3.5 s off in one jump; a tile whose camera
+starts later plays within ~14 s without a reload.

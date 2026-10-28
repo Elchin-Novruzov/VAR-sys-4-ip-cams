@@ -57,7 +57,7 @@ export function SaveSheet({
       <form
         onSubmit={submit}
         onClick={(e) => e.stopPropagation()}
-        className="sheet glass w-full sm:max-w-md rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 space-y-4"
+        className="sheet glass w-full sm:max-w-md short:!max-w-2xl rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 space-y-4 short:!p-4 short:!space-y-3"
         style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
         role="dialog"
         aria-modal="true"
@@ -81,53 +81,61 @@ export function SaveSheet({
           </button>
         </div>
 
-        <label className="block text-sm space-y-1.5">
-          <span className="muted">Label</span>
-          <input
-            ref={input}
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            maxLength={80}
-            placeholder="What happened? (optional)"
-            className="field"
-          />
-        </label>
-        <div className="flex flex-wrap gap-1.5">
-          {TAGS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className="seg !min-h-8 !px-3 !rounded-full text-xs"
-              aria-pressed={label === t}
-              onClick={() => setLabel(label === t ? "" : t)}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-
-        <div className="space-y-1.5">
-          <span className="text-sm muted">Clip length</span>
-          <div className="grid grid-cols-3 gap-1.5">
-            {LENGTHS.map((l) => (
-              <button key={l.label} type="button" className="seg" aria-pressed={len === l} onClick={() => setLen(l)}>
-                {l.label}
-              </button>
-            ))}
+        {/* a phone on its side: the label on the left, length and buttons on
+            the right, so nothing needs scrolling */}
+        <div className="space-y-4 short:grid short:grid-cols-2 short:gap-5 short:space-y-0">
+          <div className="space-y-4 short:space-y-2.5">
+            <label className="block text-sm space-y-1.5">
+              <span className="muted">Label</span>
+              <input
+                ref={input}
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                maxLength={80}
+                placeholder="What happened? (optional)"
+                className="field"
+              />
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {TAGS.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className="seg !min-h-8 !px-3 !rounded-full text-xs"
+                  aria-pressed={label === t}
+                  onClick={() => setLabel(label === t ? "" : t)}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
           </div>
-          <p className="text-xs muted">
-            {len.before / 1000} s before and {len.after / 1000} s after, every camera.
-          </p>
-        </div>
 
-        <div className="grid grid-cols-[1fr_2fr] gap-2 pt-1">
-          <button type="button" className="btn btn-ghost" onClick={onCancel}>
-            Cancel
-          </button>
-          <button type="submit" className="btn btn-brand">
-            <BookmarkPlus className="icon" aria-hidden />
-            Save moment
-          </button>
+          <div className="space-y-4 short:space-y-2.5 short:flex short:flex-col short:justify-between">
+            <div className="space-y-1.5">
+              <span className="text-sm muted">Clip length</span>
+              <div className="grid grid-cols-3 gap-1.5">
+                {LENGTHS.map((l) => (
+                  <button key={l.label} type="button" className="seg" aria-pressed={len === l} onClick={() => setLen(l)}>
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs muted">
+                {len.before / 1000} s before and {len.after / 1000} s after, every camera.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-[1fr_2fr] gap-2 pt-1">
+              <button type="button" className="btn btn-ghost" onClick={onCancel}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-brand">
+                <BookmarkPlus className="icon" aria-hidden />
+                Save moment
+              </button>
+            </div>
+          </div>
         </div>
       </form>
     </div>

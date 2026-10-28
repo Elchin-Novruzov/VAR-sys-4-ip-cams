@@ -50,7 +50,7 @@ export default async function CourtsPage() {
   const hours = Math.max(...courts.map((c) => c.retentionHours), 0);
 
   return (
-    <div className="stage min-h-[calc(100dvh-var(--app-header))] flex flex-col" style={{ overflowX: "clip" }}>
+    <div className="stage min-h-[calc(100dvh-var(--chrome-top))] flex flex-col" style={{ overflowX: "clip" }}>
       <div className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-10 sm:space-y-14">
         {/* ---- hero: the room's name, and its on-air panel ---- */}
         <section className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-end">
@@ -150,8 +150,8 @@ export default async function CourtsPage() {
                         </Link>
                       </div>
                       {/* one tap to the last seconds, already playing */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs muted pr-1">Instant replay</span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs muted pr-1 basis-full min-[420px]:basis-auto">Instant replay</span>
                         {[10, 30, 60].map((s) => (
                           <Link key={s} href={`/courts/${court.slug}?back=${s}`} className="btn btn-ghost !min-h-9 !px-3 text-sm flex-1">
                             <RotateCcw className="icon" aria-hidden />
@@ -211,7 +211,7 @@ export default async function CourtsPage() {
         )}
 
         {/* ---- keyboard: for the desk, not the phone ---- */}
-        <section className="hidden md:block">
+        <section className="hidden md:desk:block">
           <Reveal className="card p-6 space-y-5">
             <SectionHead eyebrow="At the desk" title="Pro controls" />
             <ul className="grid grid-cols-3 gap-x-6 gap-y-3">
