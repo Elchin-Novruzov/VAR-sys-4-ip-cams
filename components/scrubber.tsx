@@ -33,6 +33,9 @@ export function Scrubber({
   ranges,
   buffered,
   current,
+  marks = [],
+  activeMark = null,
+  window: reviewWindow = null,
   onScrubStart,
   onScrub,
   onCommit,
@@ -42,6 +45,11 @@ export function Scrubber({
   ranges: Range[];
   buffered: Range[];
   current: number | null;
+  /** Incidents marked in the console (wall ms) and the selected one. */
+  marks?: number[];
+  activeMark?: number | null;
+  /** The stretch a VAR review is looping or rocking over. */
+  window?: Range | null;
   onScrubStart: () => void;
   onScrub: (ms: number) => void;
   onCommit: (ms: number) => void;
@@ -200,6 +208,15 @@ export function Scrubber({
           {/* recorded: the club's green; downloaded: lime over it */}
           {bars(ranges, "r", "#2f7a47", 0.75)}
           {bars(buffered, "b", "var(--accent)", 0.35)}
+          {reviewWindow && (() => {
+            const [a, b] = clip(reviewWindow);
+            return b > a ? (
+              <div
+                className="absolute top-0 bottom-0 review-window"
+                style={{ left: `${pct(a)}%`, width: `${Math.max(0.6, pct(b) - pct(a))}%` }}
+              />
+            ) : null;
+          })()}
           {ticks.map((t) => (
             <div key={t} className="absolute top-0 bottom-0 w-px" style={{ left: `${pct(t)}%`, background: "var(--line)" }} />
           ))}
@@ -212,6 +229,11 @@ export function Scrubber({
               />
             </>
           )}
+          {marks
+            .filter((m) => m >= vFrom && m <= vTo)
+            .map((m) => (
+              <div key={m} className={`mark-flag ${m === activeMark ? "is-active" : ""}`} style={{ left: `${pct(m)}%` }} />
+            ))}
           {hover !== null && !drag && (
             <div className="absolute top-0 bottom-0 w-px" style={{ left: `${pct(hover)}%`, background: "#fff", opacity: 0.6 }} />
           )}

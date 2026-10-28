@@ -72,6 +72,8 @@ export function CourtArt({
       <path d="M 40 0 H 160 M 40 100 H 160" style={{ stroke: "#f3f5ec", strokeOpacity: 0.35, strokeWidth: 1, strokeDasharray: "1.5 2" }} />
       {cams && (
         <>
+          <ViewCone x={-8} dir={1} on={cams.left} />
+          <ViewCone x={208} dir={-1} on={cams.right} />
           <CamMark x={-8} on={cams.left} />
           <CamMark x={208} on={cams.right} />
         </>
@@ -97,6 +99,28 @@ export function CourtArt({
         </g>
       )}
     </svg>
+  );
+}
+
+/** What an end camera sees: a light wedge into the court with a scan line
+ *  sweeping across it while the camera streams. */
+function ViewCone({ x, dir, on }: { x: number; dir: 1 | -1; on: boolean }) {
+  const reach = x + dir * 122;
+  return (
+    <g style={{ opacity: on ? 1 : 0.35 }}>
+      <path d={`M ${x} 50 L ${reach} -4 L ${reach} 104 Z`} fill="#ceff65" fillOpacity={on ? 0.07 : 0.03} />
+      {on && (
+        <line x1={x} y1={50} x2={reach} y2={50} stroke="#ceff65" strokeOpacity="0.55" strokeWidth="0.6">
+          <animateTransform
+            attributeName="transform"
+            type="rotate"
+            values={`-22 ${x} 50;22 ${x} 50;-22 ${x} 50`}
+            dur={dir === 1 ? "5s" : "5.6s"}
+            repeatCount="indefinite"
+          />
+        </line>
+      )}
+    </g>
   );
 }
 

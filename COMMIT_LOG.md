@@ -5,6 +5,89 @@ as `padel_analytics/inout/COMMIT_LOG.md`.
 
 ---
 
+## 2026-10-28 — VAR review (mark, rock, loop), "save the moment", live sync, the control room
+
+The owner, after the rebrand: more moving parts and new sections on the main
+page, and replay functions that feel like an official (football) VAR --
+back-and-forth replay, easy replay, save the moment -- with the live cameras
+in sync.
+
+**Replay console** (`components/replay-console.tsx`, CSS only, no motion
+library):
+
+- **Incidents**: Mark (M) flags the moment on screen; flags on the bar
+  (`Scrubber` `marks` / `activeMark`), a strip with ‹ n/m › ([ ]), Loop,
+  Rock and remove. Session-only.
+- **VAR review**: Rock (R) plays the incident from 2 s before to 1 s after,
+  then walks it backwards (browsers cannot play video in reverse: the 100 ms
+  tick seeks back by speed × 100 ms when no seek is pending), then forwards
+  again; Loop (O) jumps back at the end. Both start at 0.5×; the play button
+  becomes Stop; Escape, a scrub, a nudge, a frame step, ⟲ or Live end it.
+  The tick calls the latest `seekWall` through an `act` ref. The reviewed
+  window is hatched lime on the bar.
+- **Broadcast touches**: a "Replay · last 10 s" banner (a green and a lime
+  band wipe across, transform/opacity only) on ⟲ and on opening with
+  `?back=`; LIVE / REPLAY / VAR REVIEW badge with the speed on every
+  picture; the readout next to the clock is now "−0:42" behind the newest
+  moment, or LIVE.
+- **Save the moment** (`components/save-sheet.tsx`, S): bottom sheet on a
+  phone, dialog on a tablet: label (typed or one tap: Double bounce, Glass
+  first, Net touch, Ball on the mesh, Let, Point of the match), 10 / 16 /
+  30 s around the selected incident or the moment on screen. Then a camera
+  flash and a note with Link (copies the share URL) and Open, gone after
+  12 s. Replaces `window.prompt`.
+- `?back=<s>` opens the replay that far back (the live page's and the
+  courts page's instant replay).
+- The pictures may shrink to 140 px (was 200) so a landscape phone keeps
+  every control on screen with the incident strip open; the keyboard hint
+  hides there.
+
+**Live page** (`components/live-grid.tsx`):
+
+- **Live sync**: the tiles are held on the same moment. MediaMTX's live
+  playlists have no PROGRAM-DATE-TIME, so each frame is dated by the
+  player's distance behind its own live edge (hls.js `latency`, Safari the
+  end of `seekable`) plus the Align offset; tiles ahead of the slowest play
+  at 0.8–0.98× until they match, more than 2.5 s ahead jumps back. "In sync"
+  in the header.
+- **hls.js first** (bug found on the way): Chrome now answers "maybe" to
+  the HLS MIME type, so the live page took Chrome's own HLS, which left the
+  second camera black (paused, readyState 0) with MediaMTX's low-latency
+  playlists. Same order as the replay page now.
+- Instant replay 10 / 30 / 60 s along the bottom.
+
+**Courts page = the control room**: hero with an on-air panel (REC light,
+signal meter, the court clock in Baku time, media server and cameras), the
+court card with each end camera's view cone and scan line and a light
+running round the border while on air, instant replay 10 / 30 / 60 s,
+counters that count up (cameras streaming, hours of replay, saved moments,
+top frame rate), "How a review works" (four steps with small animations and
+a lime line that fills as you scroll), the three latest saved moments
+(`components/clip-card.tsx`, shared with the clips page; `countClips()` in
+`lib/clips.ts`), the keyboard shortcuts as keycaps (desk sizes), the ticker.
+`components/control-room.tsx` holds the clock, counters, reveals and steps.
+
+Found and fixed on the way: our `@keyframes spin` (the border light) took
+the name of Tailwind's `animate-spin`, rotating the whole border pseudo
+element (and it would have stopped the replay spinner's rotation) --
+renamed `onair-spin`. The step cards overflowed their row and hid the line
+under them. The S that opens the save sheet landed in its label field.
+
+**Verified** (dev server, test footage): typecheck, lint, `pnpm build`
+clean. Review test (`?back=20`, M, R, Escape, O, S, a tag, save intercepted
+in the browser so nothing reached Mongo or MediaMTX): opens at −0:20;
+rock goes −1.95 s → +1.0 s at 0.5× then back down; loop wraps from +1.0 s
+to −2.0 s; the save request is the 16 s around the incident with the tag
+as label; no page errors; all controls on screen at 390×844, 844×390,
+820×1180, 1180×820. Phone audit: all checks passed, numbers unchanged
+(open 2.4 s, far tap 1.0 s, frame steps exact). Live sync with a scratch
+MediaMTX (`record: no`, recordPath in a temp folder; the test footage
+untouched, 1052 files) and two looped streams copied without re-encoding
+(CPU < 10 %): 15–20 ms apart at rest; one tile knocked 1 s back caught in
+~4 s; 3.5 s back caught in one jump (2–12 ms). Courts page screenshots at
+1440×900 and 390×844, on air and off air; no horizontal scroll. Not
+deployed yet.
+
 ## 2026-10-28 — Rebranded as Padel Center Baku: the club's colours, logo and type, a brand front door
 
 The owner: rebrand the live VAR site with the padel center's colours and
@@ -87,7 +170,13 @@ tap 1.5 h back 1.0 s, drag back 2.4 s, −10 ≈ 1.0 s, frame steps 85–163 ms
 exactly −40 ms on both cameras, ⟲ 10s 1.0 s, −1 s 16–79 ms, heap 55 MB,
 all checks passed (same as 2026-10-21). Live tiles and clip playback were
 seen without video locally (no media server here, clip files live on the
-server). Not deployed yet.
+server).
+
+**Exported** to the public repo as `96587c3` (= padel-full cc8a8ef; its main
+was the last export baa7111, no Mac commits in between; secret scan: only
+the templates' `USER:PASS` placeholders). `infra/` unchanged, so the normal
+deploy line is enough (no MediaMTX recreate). **Not deployed** until the
+owner runs the server commands (HANDOVER §7).
 
 ## 2026-10-26 — Detector cameras LIVE on the site: first camera recorded
 

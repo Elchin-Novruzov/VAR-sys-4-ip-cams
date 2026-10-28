@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowUpRight, Clapperboard } from "lucide-react";
 import { listClips, serializeClip } from "@/lib/clips";
 import { isDbConfigured } from "@/lib/mongodb";
-import { fmtBytes, fmtDateTime, fmtDuration } from "@/lib/time";
 import { Ball } from "@/components/brand";
+import { ClipCard } from "@/components/clip-card";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Saved moments" };
@@ -63,30 +61,7 @@ export default async function ClipsPage() {
       <ul className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {clips.map((c, i) => (
           <li key={c.id} className="rise" style={{ ["--d" as string]: `${120 + Math.min(i, 12) * 50}ms` }}>
-            <Link href={`/clips/${c.id}`} className="card card-hover group flex gap-4 p-4 h-full">
-              <span className="grid place-items-center h-12 w-12 shrink-0 rounded-2xl bg-[var(--accent-2)] text-[var(--accent)]">
-                <Clapperboard className="h-5 w-5" aria-hidden />
-              </span>
-              <span className="min-w-0 flex-1 space-y-1">
-                <span className="flex items-start gap-2">
-                  <span className="font-semibold leading-snug flex-1 min-w-0 break-words">{c.label}</span>
-                  <ArrowUpRight
-                    className="icon muted shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:!text-[var(--accent)]"
-                    aria-hidden
-                  />
-                </span>
-                <span className="block text-sm muted">
-                  {fmtDateTime(new Date(c.start).getTime())} · {fmtDuration(c.durationSec)} · {c.courtSlug}
-                </span>
-                <span className="flex flex-wrap gap-1 pt-1">
-                  {c.cameras.map((cam) => (
-                    <span key={cam.path} className="pill pill-quiet !font-medium !text-[0.7rem]">
-                      {cam.label} · {fmtBytes(cam.bytes)}
-                    </span>
-                  ))}
-                </span>
-              </span>
-            </Link>
+            <ClipCard clip={c} />
           </li>
         ))}
       </ul>

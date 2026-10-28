@@ -22,14 +22,18 @@ anything at the club.
 | cameras | two court cameras, relayed from the club since 2026-09-04 by a PC at the club (scheduled task, survives reboots) |
 | replay | one continuous timeline per camera over the last 4 h (§4) |
 | **detector cameras** (2026-10-26; deployed `baa7111` + MediaMTX recreated; first camera `court1-det-local` recorded the same day) | the in/out system's high-speed cameras as extra angles: the detector PC pushes them while it runs (`live_multi.py run --var`), they record and replay like the club's cameras, a per-camera clock offset lines both systems up (Align, §4 "Several camera systems"). Tested end to end on the dev PC; ship with §7. |
-| **look** (2026-10-28, not deployed yet) | rebranded as **Padel Center Baku**: the club's colours (near-black, lime `#ceff65`, green `#235834`, ball yellow), its logo and its heading face (Bebas Neue, with Inter), a brand login page and courts page with moving parts. The replay console only changed colour and icons; the phone audit passes with the 2026-10-21 numbers. Details: COMMIT_LOG 2026-10-28, "Look and brand" in §9. |
+| **look** (2026-10-28; first round exported as public `96587c3`; the VAR review round on top, see below) | rebranded as **Padel Center Baku**: the club's colours (near-black, lime `#ceff65`, green `#235834`, ball yellow), its logo and its heading face (Bebas Neue, with Inter), a brand login page and courts page with moving parts. The replay console only changed colour and icons; the phone audit passes with the 2026-10-21 numbers. Details: COMMIT_LOG 2026-10-28, "Look and brand" in §9. |
 | **open check** | `/api/health` on 2026-10-25 15:00 showed `"recordings": {"dir": "/recordings", "cameras": {}}` — the site sees the recordings folder, but it was empty. MediaMTX deletes camera folders once the last file is older than 4 h, so this most likely means **the cameras had not streamed for 4 h** (a Sunday; club PC or relay off). It can also mean the volume is mounted wrong. §8 "Replay shows nothing" has the two-minute check. Not verified yet: the new replay page with the real cameras. |
 
 ## 2. What it does (for the people using it)
 
 A referee or player at the court opens the site on a phone or tablet:
 
-- **Courts** page: each court, its cameras, "streaming / no stream".
+- **Courts** page, the "control room" (2026-10-28): an on-air panel (court
+  clock in Baku time, streaming cameras), each court with its cameras and
+  what each end camera sees, Replay / Live and **instant replay 10 / 30 /
+  60 s**, counters, "how a review works", the latest saved moments, the
+  keyboard shortcuts.
 - **Replay** (`/courts/court1`): both ends of the court side by side (stacked
   on a phone in portrait), on one clock. Opens playing 30 s before the newest
   moment. One bar covers the whole 4 h buffer; the chips **All / 30m / 5m /
@@ -39,7 +43,17 @@ A referee or player at the court opens the site on a phone or tablet:
   0.25×, 0.1×; pinch / Ctrl-scroll zoom on each picture; "Both / North end /
   South end" to focus one camera (the other stops downloading); Save.
   Keyboard: Space/K, J/L (±10 s), ←/→ (one frame), Shift+←/→ (±1 s),
-  Home/End.
+  Home/End. The readout next to the clock says how far behind the newest
+  moment the picture is (−0:42), or LIVE; each picture carries a LIVE /
+  REPLAY / VAR REVIEW badge with the speed, and jumping back shows a
+  "Replay" banner.
+- **VAR review** (2026-10-28): **Mark** (M) flags the moment on screen as an
+  incident (yellow flags on the bar; ‹ › or [ ] step between them).
+  **Rock** (R) plays the incident from 2 s before to 1 s after, then walks
+  it backwards frame by frame and forwards again, like a broadcast VAR
+  operator; **Loop** (O) repeats it. Both start at 0.5× (any speed works);
+  the play button becomes Stop. Anything that moves the picture elsewhere
+  ends the review. Incidents live for the page session only.
 - **More angles** (2026-10-26): while the in/out detector PC is at the court
   and runs with `--var`, its cameras (up to four, 60 fps) appear as extra
   tiles — 2 × 2 or 3 × 2 — next to the club's two, on the same clock.
@@ -48,9 +62,15 @@ A referee or player at the court opens the site on a phone or tablet:
   A frame step follows the fastest camera on screen (1/60 s). **Align**
   (staff/admin): pause on a clear moment, nudge one camera by a frame /
   0.1 s / 1 s until it matches the others, "Save for everyone".
-- **Save** cuts 16 s around the moment from both cameras into MP4 files and
-  gives a **share link** that works without a login (`/share/<token>`).
-- **Live** (`/courts/court1/live`): both cameras live (a few seconds late).
+- **Save** (S) opens "Save the moment": a label (typed, or one tap on
+  Double bounce / Glass first / Net touch / Ball on the mesh / Let / Point of
+  the match), 10, 16 or 30 s around the selected incident (or the moment on
+  screen), every camera cut to MP4. A camera flash, then a note with the
+  **share link** (works without a login, `/share/<token>`) and Open.
+- **Live** (`/courts/court1/live`): every camera live (a few seconds late),
+  **kept on the same moment** ("In sync" in the header; §4 "Live sync"), and
+  instant replay 10 / 30 / 60 s, which opens the replay that far back
+  (`/courts/court1?back=10`).
 - **Clips**: the saved moments.
 
 It is a replay tool for disputes (double bounce, glass first, a ball a metre
@@ -169,6 +189,27 @@ OV9281 120 fps ─► live_court.py capture ffmpeg ─┬─► detector + lossl
 The old design (until 2026-10-21) fetched 40 s windows through MediaMTX `/get`;
 rolling back past a window's start re-downloaded ~40 MB (16 s of frozen
 picture on a phone on 4G, measured). Don't go back to it.
+
+### Live sync (since 2026-10-28)
+
+The live page (`components/live-grid.tsx`) plays MediaMTX's low-latency HLS
+per camera. Each player starts wherever its first playlist put it, so the
+tiles used to drift a second or more apart. MediaMTX cuts every camera's
+live segments as frames arrive, and its playlists carry **no
+PROGRAM-DATE-TIME** (checked 2026-10-28), so the frame on screen is dated
+by its distance behind its own live edge (hls.js `latency`; Safari: the end
+of `seekable`), plus the camera's Align offset. Every 0.5 s the tiles ahead
+of the slowest one play at 0.8–0.98× until they match; one more than 2.5 s
+ahead jumps back. Measured with two streams: 15–20 ms apart at rest; a
+tile knocked 1 s back is caught in ~4 s, 3.5 s back in one jump. The header
+says "In sync" up to 120 ms.
+
+Both players use **hls.js first** (the replay always did). Chrome now
+answers "maybe" to `canPlayType("application/vnd.apple.mpegurl")`; the live
+page used to take the browser's own HLS whenever that was true, and in
+Chrome that left the second camera on a black tile with MediaMTX's
+low-latency playlists. The browser's own HLS is only for phones without
+Media Source.
 
 ### Other flows
 
@@ -352,8 +393,14 @@ the ball on black.
   they beat Tailwind utilities: override them with `!` utilities
   (`!min-h-9`, `!px-3`), as the existing console already does for buttons.
 - `motion` (the animation library) runs on the brand pages only: the header
-  nav pill, the court card tilt, the login ball. **Keep it out of the replay
-  console**: there only CSS transitions on buttons and the pulsing dot.
+  nav pill, the court card tilt, the login ball, the courts page's counters,
+  scroll reveals and review steps (`components/control-room.tsx`). **Keep it
+  out of the replay console**: there only CSS (transitions, the pulsing dot,
+  the "Replay" banner and the save flash, transform/opacity only).
+- Our keyframe names must not reuse Tailwind's (`spin`, `ping`, `pulse`,
+  `bounce`): an unlayered `@keyframes spin` once turned the courts card's
+  border light into a rotating square, and would have stopped the replay
+  spinner's rotation.
   Everything animated stops for `prefers-reduced-motion`.
 - `scripts/checks/replay-audit.mjs` finds the clock by `[data-clock]` and the
   buttons by their accessible names (`Play`/`Pause`, `back one frame`,
@@ -424,4 +471,4 @@ Open, roughly in order:
 | 2026-10-21 | the owner: rolling back "doesn't work, slow, laggy". Audit measured why; replay rebuilt as one HLS timeline over the recording files; 11 bugs found and fixed while driving it (COMMIT_LOG); exported and deployed |
 | 2026-10-25 | this handover; docs brought up to date; `scripts/checks/` committed |
 | 2026-10-26 | the in/out detector cameras as extra angles: N-camera grid, VAR / Detector focus, per-camera clock offsets + Align, detector uplink from `live_multi.py --var`; deployed (MediaMTX recreated), first detector camera recorded on the server |
-| 2026-10-28 | rebranded as Padel Center Baku (colours, logo, fonts, brand login and courts pages, icons on every control); not deployed yet |
+| 2026-10-28 | rebranded as Padel Center Baku (colours, logo, fonts, brand login and courts pages, icons on every control); then the VAR review (incidents, rock / loop, save sheet, broadcast badges), live sync + instant replay, the control-room courts page; live page back on hls.js in Chrome |

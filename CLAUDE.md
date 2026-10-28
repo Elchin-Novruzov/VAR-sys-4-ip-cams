@@ -103,7 +103,11 @@ Invariants that span files:
   brand pages, never in the replay console. HANDOVER §9 "Look and brand".
 - `scripts/checks/replay-audit.mjs` finds the clock by `[data-clock]` and
   buttons by accessible name (`Play`/`Pause`, `back one frame`, `10s`,
-  `−10`, `1×`): keep those names when restyling the console.
+  `−10`, `1×`): keep those names when restyling the console (during a VAR
+  review the play button is `Stop review`).
+- The VAR review (Mark / Rock / Loop) drives the clock from the console's
+  100 ms tick through `act.current.seekWall` (the tick's closure is the first
+  render's). Anything that moves the picture elsewhere calls `endReview()`.
 
 ## Lessons already paid for (don't rediscover)
 
@@ -155,6 +159,12 @@ Invariants that span files:
   prebuilt image, `up -d --build` leaves the old container (and the old
   file's inode) running. The detector paths were refused as unknown after a
   normal deploy on 2026-10-26.
+- Chrome answers "maybe" to `canPlayType("application/vnd.apple.mpegurl")`
+  now. Every player tries **hls.js first** and falls back to the browser's
+  HLS only without Media Source; Chrome's own HLS left the second live
+  camera black (2026-10-28).
+- MediaMTX's live (low-latency) playlists have no PROGRAM-DATE-TIME; live
+  sync dates frames by `hls.latency` instead (HANDOVER §4 "Live sync").
 - Never run `pnpm mediamtx` (recordDeleteAfter 4h) on a folder holding
   test recordings: it deletes them. Live tests record into a scratch
   recordPath with their own MediaMTX config; read-only tests use a config

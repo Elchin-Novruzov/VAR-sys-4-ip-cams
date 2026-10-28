@@ -78,6 +78,11 @@ export async function listClips(limit = 200): Promise<ClipDoc[]> {
   return db.collection<ClipDoc>("clips").find({}, { sort: { createdAt: -1 }, limit }).toArray();
 }
 
+export async function countClips(): Promise<number> {
+  const db = await getDb();
+  return db.collection<ClipDoc>("clips").countDocuments();
+}
+
 export async function getClip(id: string): Promise<ClipDoc | null> {
   if (!ObjectId.isValid(id)) return null;
   const db = await getDb();

@@ -2,16 +2,39 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookmarkPlus, ChartGantt, ChevronLeft, Pause, Play, RotateCcw, StepBack, StepForward } from "lucide-react";
-import type { CameraConfig, CourtConfig } from "@/lib/types";
+import {
+  ArrowLeftRight,
+  BookmarkPlus,
+  ChartGantt,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  Link2,
+  Pause,
+  Play,
+  Repeat,
+  RotateCcw,
+  Square,
+  StepBack,
+  StepForward,
+  X,
+} from "lucide-react";
+import type { CameraConfig, CourtConfig, SerializedClip } from "@/lib/types";
 import { fmtClock } from "@/lib/time";
 import { CameraPlayer, pickEngine, type Engine, type WallRange } from "@/lib/replay-player";
 import { ZoomPan } from "./zoom-pan";
 import { Scrubber } from "./scrubber";
+import { SaveSheet, type ClipLength } from "./save-sheet";
 
 const SPEEDS = [1, 0.5, 0.25, 0.1] as const;
-/** Opening the page plays from this many seconds before the newest moment. */
+/** Opening the page plays from this many seconds before the newest moment
+ *  (the live page's instant-replay buttons open it with ?back=<seconds>). */
 const OPEN_LEAD_SEC = 30;
+/** VAR review window around an incident: from 2 s before to 1 s after, the
+ *  stretch a review rocks back and forth over. */
+const REVIEW_BEFORE_MS = 2000;
+const REVIEW_AFTER_MS = 1000;
 /** "Live" plays this far behind the newest segment, so playback never runs
  *  into the edge and stalls while the next two seconds are recorded. */
 const LIVE_LAG_SEC = 6;
@@ -50,6 +73,24 @@ type Ui = {
 };
 
 const EMPTY_UI: Ui = { wall: null, playing: false, from: null, until: null, ranges: [], buffered: [], tiles: {} };
+
+/** A running VAR review of one incident. "loop" plays the window again and
+ *  again; "rock" plays it forward, then walks it backwards frame by frame
+ *  (browsers cannot play video in reverse), then forward again. */
+type Review = { mark: number; mode: "loop" | "rock"; phase: "fwd" | "back"; target: number };
+
+/** "−0:42" behind the newest moment. */
+function fmtBehind(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, "0");
+  return h ? `−${h}:${String(m).padStart(2, "0")}:${ss}` : `−${m}:${ss}`;
+}
+
+function centis(ms: number): string {
+  return String(Math.floor((ms % 1000) / 10)).padStart(2, "0");
+}
 
 /** Focus: "all", "group:<var|detector>", or one camera's path. */
 function shownIn(focus: string, cam: CameraConfig): boolean {
@@ -106,8 +147,29 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
   const [rate, setRateState] = useState(1);
   const [focus, setFocusState] = useState<string>("all");
   const [scrubVisible, setScrubVisible] = useState(true);
-  const [save, setSave] = useState<{ status: "idle" | "saving" | "done" | "error"; msg?: string; id?: string }>({
+  const [save, setSave] = useState<{ status: "idle" | "saving" | "done" | "error"; msg?: string; clip?: SerializedClip }>({
     status: "idle",
+  });
+  /** "Save the moment" sheet: the moment it was opened on (wall ms). */
+  const [sheet, setSheet] = useState<{ center: number; incident: boolean } | null>(null);
+  const [copied, setCopied] = useState(false);
+  /** Incidents marked on the timeline this session (wall ms, sorted), and
+   *  the one selected; a review runs on the selected one. */
+  const [marks, setMarks] = useState<number[]>([]);
+  const [activeMark, setActiveMark] = useState<number | null>(null);
+  const review = useRef<Review | null>(null);
+  const [reviewUi, setReviewUi] = useState<{ mode: Review["mode"]; mark: number } | null>(null);
+  const reviewMode = reviewUi?.mode ?? null;
+  /** Broadcast-style banner over the pictures ("Replay", "VAR review"). */
+  const [stinger, setStinger] = useState<{ key: number; title: string; sub?: string } | null>(null);
+  const stingerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [flashKey, setFlashKey] = useState(0);
+  const openLead = useRef(OPEN_LEAD_SEC);
+  /** The latest action functions, for the interval tick and mount effects
+   *  (their closures would otherwise keep the first render's copies). */
+  const act = useRef<{ seekWall: (ms: number, play?: boolean) => void; showStinger: (title: string, sub?: string) => void }>({
+    seekWall: () => {},
+    showStinger: () => {},
   });
   /** Align panel: which camera is being lined up, its unsaved offset, status. */
   const [align, setAlign] = useState<{ open: boolean; camera: string; msg?: string; busy?: boolean }>({
@@ -156,6 +218,16 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
     return () => {
       live = false;
     };
+  }, []);
+
+  // opened from the live page's instant replay (?back=10): start that far
+  // back instead of OPEN_LEAD_SEC, with the replay banner
+  useEffect(() => {
+    const back = Number(new URLSearchParams(window.location.search).get("back"));
+    if (!(back >= 2 && back <= 3600)) return;
+    openLead.current = back;
+    const t = setTimeout(() => act.current.showStinger("Replay", `last ${back} s`), 0);
+    return () => clearTimeout(t);
   }, []);
 
   const refreshInfo = useCallback(async () => {
@@ -234,7 +306,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
       p.setOffset(drafts.current[cam.path] ?? inf.offsetMs ?? 0);
       p.video.muted = true;
       p.video.playbackRate = rateRef.current;
-      void p.start(startWall, OPEN_LEAD_SEC, wantPlay.current);
+      void p.start(startWall, openLead.current, wantPlay.current);
       if (!shownIn(focusRef.current, cam)) p.setLoading(false);
     }
   }, [engine, info, cams, gen, refreshInfo]);
@@ -338,6 +410,32 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
         wall = m.wallAt(m.frameTime) ?? wall;
       }
       if (wall !== null) lastWall.current = wall;
+
+      // a VAR review drives the clock itself: back to the start of the
+      // window at its end (loop), or walk back over it at the chosen speed
+      // (rock), never while the user drags the bar or a jump is loading
+      const rv = review.current;
+      if (rv && m && wall !== null && !scrub.current && !m.video.seeking && !document.hidden) {
+        const a = rv.mark - REVIEW_BEFORE_MS;
+        const b = rv.mark + REVIEW_AFTER_MS;
+        if (rv.phase === "fwd") {
+          if (wall >= b) {
+            if (rv.mode === "loop") act.current.seekWall(a, true);
+            else {
+              rv.phase = "back";
+              rv.target = wall;
+              act.current.seekWall(wall, false);
+            }
+          }
+        } else {
+          rv.target -= rateRef.current * TICK_MS;
+          if (rv.target <= a) {
+            rv.phase = "fwd";
+            act.current.seekWall(a, true);
+          } else act.current.seekWall(rv.target, false);
+        }
+      }
+
       const inf = infoRef.current;
       const camRanges = cams.map((c) => {
         const p = players.current[c.path];
@@ -470,9 +568,19 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
       p.video.pause();
     }
   };
-  const togglePlay = () => (wantPlay.current && !masterPlayer()?.video.paused ? pause() : play());
+  const togglePlay = () => {
+    // during a review the button stops it (the review plays and pauses itself)
+    if (review.current) {
+      endReview();
+      pause();
+      return;
+    }
+    if (wantPlay.current && !masterPlayer()?.video.paused) pause();
+    else play();
+  };
 
   const nudge = (sec: number) => {
+    endReview();
     const w = currentWall();
     if (w !== null) seekWall(w + sec * 1000);
   };
@@ -482,6 +590,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
    *  60 fps detector camera steps 1/60 s; the 25 fps cameras hold their frame
    *  until their next one is due). */
   const step = (n: number) => {
+    endReview();
     const w0 = currentWall();
     const cands = visiblePaths()
       .map((p) => players.current[p])
@@ -502,12 +611,78 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
   };
 
   const replayLast = (sec: number) => {
+    endReview();
     const until = limits().until;
-    if (until !== null) seekWall(until - sec * 1000, true);
+    if (until === null) return;
+    seekWall(until - sec * 1000, true);
+    showStinger("Replay", `last ${sec} s`);
   };
   const goLive = () => {
+    endReview();
     const until = limits().until;
     if (until !== null) seekWall(until - LIVE_LAG_SEC * 1000, true);
+  };
+
+  // ---- broadcast touches ----
+  const showStinger = (title: string, sub?: string) => {
+    if (stingerTimer.current) clearTimeout(stingerTimer.current);
+    setStinger({ key: Date.now(), title, sub });
+    stingerTimer.current = setTimeout(() => setStinger(null), 1000);
+  };
+
+  // ---- incidents and the VAR review ----
+  const endReview = () => {
+    if (!review.current) return;
+    review.current = null;
+    setReviewUi(null);
+  };
+  /** Mark the moment on screen as an incident (M). */
+  const markNow = () => {
+    const w = currentWall();
+    if (w === null) return;
+    setMarks((ms) => [...ms.filter((x) => Math.abs(x - w) > 400), w].sort((a, b) => a - b).slice(-30));
+    setActiveMark(w);
+    showStinger("Incident", fmtClock(w));
+  };
+  const goToMark = (w: number) => {
+    endReview();
+    setActiveMark(w);
+    seekWall(w, false);
+  };
+  const shiftMark = (dir: -1 | 1) => {
+    if (!marks.length) return;
+    const i = activeMark === null ? -1 : marks.indexOf(activeMark);
+    const j = Math.min(marks.length - 1, Math.max(0, i + dir));
+    goToMark(marks[j]);
+  };
+  const removeMark = () => {
+    if (activeMark === null) return;
+    endReview();
+    const rest = marks.filter((x) => x !== activeMark);
+    setMarks(rest);
+    setActiveMark(rest.length ? rest[rest.length - 1] : null);
+  };
+  /** Loop or rock the selected incident (marking the moment on screen if
+   *  none is); the same button again stops it. Starts in slow motion. */
+  const toggleReview = (mode: Review["mode"]) => {
+    if (review.current?.mode === mode) {
+      endReview();
+      pause();
+      return;
+    }
+    let mark = activeMark;
+    if (mark === null) {
+      mark = currentWall();
+      if (mark === null) return;
+      const w = mark;
+      setMarks((ms) => [...ms.filter((x) => Math.abs(x - w) > 400), w].sort((a, b) => a - b).slice(-30));
+      setActiveMark(w);
+    }
+    if (rateRef.current === 1) changeRate(0.5);
+    review.current = { mark, mode, phase: "fwd", target: mark };
+    setReviewUi({ mode, mark });
+    seekWall(mark - REVIEW_BEFORE_MS, true);
+    showStinger("VAR review", mode === "rock" ? "back and forth" : "loop");
   };
 
   const changeRate = (r: number) => {
@@ -598,6 +773,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
 
   // ---- the bar ----
   const onScrubStart = () => {
+    endReview();
     scrub.current = { wasPlaying: wantPlay.current, timer: null };
     for (const p of Object.values(players.current)) p.video.pause();
   };
@@ -626,9 +802,23 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (tag === "INPUT" || tag === "TEXTAREA" || sheet) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
-      if (e.code === "Space" || k === "k") {
+      if (k === "m") markNow();
+      else if (k === "o") toggleReview("loop");
+      else if (k === "r") toggleReview("rock");
+      else if (k === "s") {
+        // or the key lands in the label field that just opened
+        e.preventDefault();
+        openSave();
+      }
+      else if (k === "[") shiftMark(-1);
+      else if (k === "]") shiftMark(1);
+      else if (e.key === "Escape" && review.current) {
+        endReview();
+        pause();
+      } else if (e.code === "Space" || k === "k") {
         e.preventDefault();
         togglePlay();
       } else if (k === "j") nudge(-10);
@@ -665,34 +855,71 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
     return () => document.removeEventListener("visibilitychange", h);
   }, [cams]);
 
-  const saveMoment = async () => {
-    const w = currentWall();
-    if (w === null) return;
-    const label = window.prompt("Label for this moment (optional)", "");
-    if (label === null) return;
-    const until = limits().until ?? w + 8000;
-    const startMs = w - 8000;
-    const durationSec = Math.max(2, Math.min(16, (until - startMs) / 1000));
+  // ---- save the moment ----
+  /** Opens the save sheet on the selected incident, or on the moment on
+   *  screen; that moment is kept while the sheet is open. */
+  const openSave = () => {
+    const w = activeMark ?? currentWall();
+    if (w === null || save.status === "saving") return;
+    setSheet({ center: w, incident: activeMark !== null });
+  };
+  const saveMoment = async (label: string, len: ClipLength) => {
+    if (!sheet) return;
+    const w = sheet.center;
+    setSheet(null);
+    const until = limits().until ?? w + len.after;
+    const startMs = w - len.before;
+    const durationSec = Math.max(2, Math.min((len.before + len.after) / 1000, (until - startMs) / 1000));
     setSave({ status: "saving" });
+    setCopied(false);
     try {
       const res = await fetch("/api/clips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courtSlug: court.slug, start: new Date(startMs).toISOString(), durationSec, label }),
       });
-      const data = (await res.json()) as { clip?: { id: string }; error?: string };
+      const data = (await res.json()) as { clip?: SerializedClip; error?: string };
       if (!res.ok || !data.clip) throw new Error(data.error ?? res.statusText);
-      setSave({ status: "done", id: data.clip.id });
+      setSave({ status: "done", clip: data.clip });
+      setFlashKey((k) => k + 1);
     } catch (e) {
       setSave({ status: "error", msg: (e as Error).message });
     }
   };
+  // the "moment saved" note goes away by itself
+  useEffect(() => {
+    if (save.status !== "done") return;
+    const t = setTimeout(() => setSave((s) => (s.status === "done" ? { status: "idle" } : s)), 12_000);
+    return () => clearTimeout(t);
+  }, [save.status]);
+
+  const copyShare = async () => {
+    if (!save.clip) return;
+    const url = `${window.location.origin}/share/${save.clip.shareToken}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      window.prompt("Copy this link", url);
+    }
+  };
+
+  // the interval tick and the mount effects call the latest actions
+  useEffect(() => {
+    act.current = { seekWall, showStinger };
+  });
 
   const wall = ui.wall;
-  const centis = wall !== null ? String(Math.floor((wall % 1000) / 10)).padStart(2, "0") : "00";
   const atLive = ui.playing && wall !== null && ui.until !== null && ui.until - wall < (LIVE_LAG_SEC + 4) * 1000;
   const ready = wall !== null;
   const anyRecording = Object.values(info).some((c) => c.segments > 0);
+  // incidents that fell out of the four-hour buffer are dropped from view
+  const shownMarks = ui.from !== null ? marks.filter((x) => x >= (ui.from as number)) : marks;
+  const markIndex = activeMark !== null ? shownMarks.indexOf(activeMark) : -1;
+  const reviewWindow: [number, number] | null = reviewUi
+    ? [reviewUi.mark - REVIEW_BEFORE_MS, reviewUi.mark + REVIEW_AFTER_MS]
+    : null;
+  const badge = reviewMode ? "VAR review" : atLive ? "Live" : "Replay";
 
   const here = cams.filter((c) => isHere(c, info));
   const groups = [...new Set(here.map((c) => c.group ?? "var"))];
@@ -721,10 +948,29 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
           data-clock
           className="text-sm sm:text-base font-semibold tabular-nums flex-1 min-w-0 text-right sm:text-left sm:flex-none tracking-tight"
         >
-          {wall !== null ? `${fmtClock(wall)}.${centis}` : "--:--:--"}
+          {wall !== null ? `${fmtClock(wall)}.${centis(wall)}` : "--:--:--"}
         </span>
-        <span className={`pill ${ui.until ? "pill-ok" : "pill-bad"}`}>
-          {ui.until ? `until ${fmtClock(ui.until)}` : anyRecording ? "loading" : "no recording"}
+        {/* how far behind the newest moment, broadcast style; LIVE at the edge */}
+        <span
+          className={`pill tabular-nums ${!ui.until ? "pill-bad" : atLive ? "pill-live" : "pill-ok"}`}
+          title={ui.until ? `newest moment ${fmtClock(ui.until)}` : undefined}
+        >
+          {ui.until ? (
+            atLive ? (
+              <>
+                <span className="dot live" />
+                Live
+              </>
+            ) : wall !== null ? (
+              fmtBehind(ui.until - wall)
+            ) : (
+              `until ${fmtClock(ui.until)}`
+            )
+          ) : anyRecording ? (
+            "loading"
+          ) : (
+            "no recording"
+          )}
         </span>
         {here.length > 1 && (
           <div className="flex gap-1 basis-full sm:basis-auto sm:ml-auto items-center">
@@ -851,7 +1097,40 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
 
       {/* cameras: grow to fill, but never collapse below a usable height;
           if the controls need more room than the screen has, the page scrolls */}
-      <div className={`flex-1 grid gap-1 p-1 ${gridClass}`} style={{ minHeight: "clamp(200px, 42dvh, 520px)" }}>
+      <div className={`relative flex-1 grid gap-1 p-1 ${gridClass}`} style={{ minHeight: "clamp(140px, 38dvh, 520px)" }}>
+        {/* broadcast overlays: out of the grid flow (absolute), never in the way of a finger */}
+        {stinger && (
+          <div key={stinger.key} className="stinger" aria-live="polite">
+            <div className="stinger-band stinger-band-2" />
+            <div className="stinger-band" />
+            <div className="stinger-text">
+              <span className="display text-4xl sm:text-6xl">{stinger.title}</span>
+              {stinger.sub && <span className="stinger-sub">{stinger.sub}</span>}
+            </div>
+          </div>
+        )}
+        {flashKey > 0 && <div key={flashKey} className="shutter-flash" aria-hidden />}
+        {save.status === "done" && save.clip && (
+          <div className="toast glass" role="status">
+            <span className="toast-check">
+              <Check className="h-4 w-4" aria-hidden strokeWidth={3} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block display text-xl leading-none">Moment saved</span>
+              <span className="block text-xs muted truncate">{save.clip.label || "Saved moment"}</span>
+            </span>
+            <button className="btn-brand !min-h-9 !px-3 text-sm inline-flex items-center gap-1.5" onClick={() => void copyShare()}>
+              {copied ? <Check className="icon" aria-hidden /> : <Link2 className="icon" aria-hidden />}
+              {copied ? "Copied" : "Link"}
+            </button>
+            <a href={`/clips/${save.clip.id}`} className="btn btn-ghost !min-h-9 !px-3 text-sm">
+              Open
+            </a>
+            <button className="!min-h-9 !px-2" aria-label="close" onClick={() => setSave({ status: "idle" })}>
+              <X className="icon" aria-hidden />
+            </button>
+          </div>
+        )}
         {cams.map((cam) => {
           const t = ui.tiles[cam.path] ?? { kind: "loading" };
           return (
@@ -879,6 +1158,15 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
                 {cam.fps > 30 ? ` · ${cam.fps} fps` : ""}
                 {align.open && align.camera === cam.path ? " · aligning" : ""}
               </div>
+              {t.kind === "ok" && (
+                <div className={`tile-badge ${reviewMode ? "is-review" : atLive ? "is-live" : ""}`} aria-hidden>
+                  {atLive && !reviewMode && <span className="dot live" />}
+                  {reviewMode === "rock" && <ArrowLeftRight className="h-3 w-3" />}
+                  {reviewMode === "loop" && <Repeat className="h-3 w-3" />}
+                  {badge}
+                  {rate < 1 ? ` · ${rate}×` : ""}
+                </div>
+              )}
               {t.kind !== "ok" ? (
                 <div
                   className="absolute inset-0 grid place-items-center text-sm pointer-events-none px-6 text-center"
@@ -911,6 +1199,64 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
           paddingBottom: "max(0.4rem, env(safe-area-inset-bottom))",
         }}
       >
+        {shownMarks.length > 0 && (
+          // the incident strip: step through marked moments and review one
+          <div className="controls-row no-scrollbar flex items-center gap-1 text-sm overflow-x-auto">
+            <span className={`pill ${reviewMode ? "pill-live" : "pill-quiet"} !py-1`}>
+              <Flag className="h-3 w-3" aria-hidden />
+              <span className="tabular-nums">
+                {markIndex >= 0 ? markIndex + 1 : "–"}/{shownMarks.length}
+              </span>
+            </span>
+            <button className="!min-h-8 !px-1.5" onClick={() => shiftMark(-1)} disabled={markIndex <= 0} aria-label="previous incident" title="previous incident ([)">
+              <ChevronLeft className="icon" aria-hidden />
+            </button>
+            <button
+              className="!min-h-8 !px-2 font-semibold tabular-nums"
+              onClick={() => activeMark !== null && goToMark(activeMark)}
+              disabled={activeMark === null}
+              title="go to this incident"
+            >
+              {activeMark !== null ? `${fmtClock(activeMark)}.${centis(activeMark)}` : "pick one"}
+            </button>
+            <button
+              className="!min-h-8 !px-1.5"
+              onClick={() => shiftMark(1)}
+              disabled={markIndex >= shownMarks.length - 1}
+              aria-label="next incident"
+              title="next incident (])"
+            >
+              <ChevronRight className="icon" aria-hidden />
+            </button>
+            <span className="flex-1" />
+            <button
+              className="seg !min-h-8 !px-2 inline-flex items-center gap-1"
+              aria-pressed={reviewMode === "loop"}
+              aria-label="Loop"
+              onClick={() => toggleReview("loop")}
+              disabled={!ready}
+              title="Loop the incident, 2 s before to 1 s after (O)"
+            >
+              <Repeat className="icon" aria-hidden />
+              <span className="hidden sm:inline">Loop</span>
+            </button>
+            <button
+              className="seg !min-h-8 !px-2 inline-flex items-center gap-1"
+              aria-pressed={reviewMode === "rock"}
+              aria-label="Rock"
+              onClick={() => toggleReview("rock")}
+              disabled={!ready}
+              title="Rock the incident back and forth (R)"
+            >
+              <ArrowLeftRight className="icon" aria-hidden />
+              <span className="hidden sm:inline">Rock</span>
+            </button>
+            <button className="!min-h-8 !px-1.5" onClick={removeMark} disabled={activeMark === null} aria-label="remove incident" title="remove this incident">
+              <X className="icon" aria-hidden />
+            </button>
+          </div>
+        )}
+
         {scrubVisible && ui.from !== null && ui.until !== null && ui.until > ui.from && (
           <Scrubber
             from={ui.from}
@@ -918,6 +1264,9 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
             ranges={ui.ranges}
             buffered={ui.buffered}
             current={wall}
+            marks={shownMarks}
+            activeMark={activeMark}
+            window={reviewWindow}
             onScrubStart={onScrubStart}
             onScrub={onScrub}
             onCommit={onCommit}
@@ -940,10 +1289,16 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
               disabled={!ready}
               className="play-btn font-semibold min-w-16 sm:min-w-24 inline-flex items-center justify-center gap-1.5"
               style={{ background: "var(--text)", color: "var(--bg)", borderColor: "transparent" }}
-              aria-label={ui.playing ? "Pause" : "Play"}
+              aria-label={reviewMode ? "Stop review" : ui.playing ? "Pause" : "Play"}
             >
-              {ui.playing ? <Pause className="icon" aria-hidden fill="currentColor" /> : <Play className="icon" aria-hidden fill="currentColor" />}
-              <span className="hidden sm:inline">{ui.playing ? "Pause" : "Play"}</span>
+              {reviewMode ? (
+                <Square className="icon" aria-hidden fill="currentColor" />
+              ) : ui.playing ? (
+                <Pause className="icon" aria-hidden fill="currentColor" />
+              ) : (
+                <Play className="icon" aria-hidden fill="currentColor" />
+              )}
+              <span className="hidden sm:inline">{reviewMode ? "Stop" : ui.playing ? "Pause" : "Play"}</span>
             </button>
             <button onClick={() => step(1)} disabled={!ready} title="forward one frame (→)" aria-label="forward one frame">
               <StepForward className="icon" aria-hidden />
@@ -978,6 +1333,16 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
               <span className={`dot ${atLive ? "" : "live"}`} style={atLive ? { background: "#fff" } : undefined} />
               Live
             </button>
+            <button
+              onClick={markNow}
+              disabled={!ready}
+              className="whitespace-nowrap inline-flex items-center gap-1.5"
+              title="Mark this moment as an incident (M)"
+              aria-label="Mark incident"
+            >
+              <Flag className="icon" aria-hidden style={{ color: "var(--accent)" }} />
+              <span className="hidden sm:inline">Mark</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-1">
@@ -997,9 +1362,10 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
               <ChartGantt className="icon" aria-hidden />
             </button>
             <button
-              onClick={saveMoment}
+              onClick={openSave}
               disabled={!ready || save.status === "saving"}
               className="btn-brand whitespace-nowrap inline-flex items-center gap-1.5"
+              title="Save this moment and get a share link (S)"
             >
               <BookmarkPlus className="icon" aria-hidden />
               {save.status === "saving" ? "Saving…" : "Save"}
@@ -1007,25 +1373,27 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
           </div>
         </div>
 
-        {save.status === "done" && (
-          <div className="text-sm">
-            Saved.{" "}
-            <a className="underline text-[var(--accent)]" href={`/clips/${save.id}`}>
-              Open the clip
-            </a>
-          </div>
-        )}
         {save.status === "error" && (
           <div className="text-sm" style={{ color: "var(--danger-text)" }}>
             Could not save: {save.msg}
           </div>
         )}
-        <p className="text-xs hidden md:block" style={{ color: "var(--muted)" }}>
+        <p className="text-xs hidden md:block short:!hidden" style={{ color: "var(--muted)" }}>
           Drag the bar to any moment (All / 30m / 5m / 1m zooms it) · Space or K: play or pause · J / L: ten
-          seconds · ← →: one frame · Shift + ← →: one second · Ctrl + scroll, pinch or the + − buttons to zoom the
-          picture · drag to pan · double-click to zoom or reset.
+          seconds · ← →: one frame · Shift + ← →: one second · M: mark an incident · O: loop it · R: rock it back and
+          forth · [ ]: previous / next incident · S: save · Ctrl + scroll, pinch or the + − buttons to zoom · drag to
+          pan · double-click to zoom or reset.
         </p>
       </div>
+
+      {sheet && (
+        <SaveSheet
+          center={sheet.center}
+          incident={sheet.incident}
+          onCancel={() => setSheet(null)}
+          onSave={(label, len) => void saveMoment(label, len)}
+        />
+      )}
     </div>
   );
 }
