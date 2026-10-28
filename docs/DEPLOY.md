@@ -41,6 +41,15 @@ site, with the site on the host loopback:
 docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostproxy.yml --env-file .env up -d --build mediamtx web
 ```
 
+After an update that changed `infra/mediamtx.yml` (new camera paths, for
+example), recreate the media server too -- `up -d` alone keeps it running
+with the old file (a single-file bind mount into a prebuilt image; found
+2026-10-26):
+
+```bash
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostproxy.yml --env-file .env up -d --force-recreate mediamtx
+```
+
 Then give the host Caddy one site block (`/etc/caddy/Caddyfile`), and make
 sure its global options do not say `auto_https off` — that disables
 certificate management for every site; `auto_https disable_redirects` keeps

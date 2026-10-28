@@ -95,6 +95,15 @@ Invariants that span files:
   640 px); short-landscape phones hide the header (`.app-header`) and keep
   the replay controls on one line (`.controls-row`). New controls inherit
   this — don't hardcode heights.
+- The look is **Padel Center Baku**'s brand (since 2026-10-28): colours are
+  the tokens in `globals.css` `:root` (no new hex values in components),
+  headings `.display` (Bebas Neue), buttons `.btn-accent` / `.btn-brand` /
+  `.seg` with `aria-pressed`. Those classes are unlayered, so Tailwind
+  utilities need `!` to override them. `motion` animations stay on the
+  brand pages, never in the replay console. HANDOVER §9 "Look and brand".
+- `scripts/checks/replay-audit.mjs` finds the clock by `[data-clock]` and
+  buttons by accessible name (`Play`/`Pause`, `back one frame`, `10s`,
+  `−10`, `1×`): keep those names when restyling the console.
 
 ## Lessons already paid for (don't rediscover)
 
@@ -141,6 +150,11 @@ Invariants that span files:
 - `lib/recordings.ts` keeps its index on `globalThis` (the dev server
   gives each route its own module copy): **restart the dev server after
   editing it**, a hot reload keeps the old instance.
+- A deploy that changes `infra/mediamtx.yml` needs `up -d --force-recreate
+  mediamtx` on the server: the config is a single-file bind mount into a
+  prebuilt image, `up -d --build` leaves the old container (and the old
+  file's inode) running. The detector paths were refused as unknown after a
+  normal deploy on 2026-10-26.
 - Never run `pnpm mediamtx` (recordDeleteAfter 4h) on a folder holding
   test recordings: it deletes them. Live tests record into a scratch
   recordPath with their own MediaMTX config; read-only tests use a config

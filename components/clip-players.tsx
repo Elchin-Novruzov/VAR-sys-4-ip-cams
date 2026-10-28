@@ -3,6 +3,7 @@
 import { useRef, useState, useSyncExternalStore } from "react";
 import type { SerializedClip } from "@/lib/types";
 import { fmtBytes, fmtDateTime, fmtDuration } from "@/lib/time";
+import { Check, Download, Link2, Pause, Play, RotateCcw } from "lucide-react";
 import { ZoomPan } from "./zoom-pan";
 
 /** Plays a saved clip, all cameras together, with the same slow-motion and
@@ -63,11 +64,12 @@ export function ClipPlayers({
   };
 
   return (
-    <div className="p-2 sm:p-4 space-y-3">
-      <div>
-        <h1 className="text-lg font-semibold">{clip.label}</h1>
+    <div className="p-2 sm:p-4 space-y-3 max-w-7xl mx-auto fade">
+      <div className="px-1 space-y-0.5">
+        {clip.label.trim().toLowerCase() !== "saved moment" && <div className="eyebrow">Saved moment</div>}
+        <h1 className="display text-3xl sm:text-4xl break-words">{clip.label}</h1>
         {/* local time differs between the server and the viewer's browser */}
-        <p className="text-sm" style={{ color: "var(--muted)" }} suppressHydrationWarning>
+        <p className="text-sm muted" suppressHydrationWarning>
           {fmtDateTime(new Date(clip.start).getTime())} · {fmtDuration(clip.durationSec)} · {clip.courtSlug}
         </p>
       </div>
@@ -91,49 +93,53 @@ export function ClipPlayers({
                 className="w-full h-full object-contain"
               />
             </ZoomPan>
-            <div className="absolute left-2 top-2 text-xs px-2 py-1 rounded bg-black/60 pointer-events-none">
+            <div className="absolute left-2 top-2 tile-label pointer-events-none">
               {cam.label} · {fmtBytes(cam.bytes)}
             </div>
           </div>
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={restart}>⟲ Start</button>
-        <button onClick={playAll} className="font-semibold" style={{ background: "var(--panel-2)" }}>
-          Play both
+        <button onClick={restart} className="inline-flex items-center gap-1.5">
+          <RotateCcw className="icon" aria-hidden />
+          Start
         </button>
-        <button onClick={pauseAll}>Pause</button>
+        <button
+          onClick={playAll}
+          className="font-semibold inline-flex items-center gap-1.5"
+          style={{ background: "var(--text)", color: "var(--bg)", borderColor: "transparent" }}
+        >
+          <Play className="icon" aria-hidden fill="currentColor" />
+          {clip.cameras.length === 2 ? "Play both" : "Play"}
+        </button>
+        <button onClick={pauseAll} className="inline-flex items-center gap-1.5">
+          <Pause className="icon" aria-hidden fill="currentColor" />
+          Pause
+        </button>
         <div className="flex gap-1">
           {[1, 0.5, 0.25, 0.1].map((s) => (
-            <button
-              key={s}
-              onClick={() => changeRate(s)}
-              className="text-sm"
-              style={{ background: rate === s ? "var(--accent)" : undefined, color: rate === s ? "#06202b" : undefined }}
-            >
+            <button key={s} onClick={() => changeRate(s)} className="seg text-sm" aria-pressed={rate === s}>
               {s}×
             </button>
           ))}
         </div>
         {showShare && (
-          <button
-            onClick={copy}
-            className="ml-auto whitespace-nowrap"
-            style={{ background: "var(--accent-2)", color: "#03200f", border: "none" }}
-          >
+          <button onClick={copy} className="btn-brand ml-auto whitespace-nowrap inline-flex items-center gap-1.5">
+            {copied ? <Check className="icon" aria-hidden /> : <Link2 className="icon" aria-hidden />}
             {copied ? "Link copied" : "Copy share link"}
           </button>
         )}
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      <div className="flex flex-wrap gap-2 text-sm">
         {clip.cameras.map((cam) => (
-          <a key={cam.path} href={fileUrl(cam.path)} download className="underline">
-            Download {cam.label}
+          <a key={cam.path} href={fileUrl(cam.path)} download className="btn btn-ghost !min-h-9 !px-3 text-sm !font-medium">
+            <Download className="icon" aria-hidden />
+            {cam.label}
           </a>
         ))}
       </div>
       {showShare && origin && (
-        <p className="text-xs break-all" style={{ color: "var(--muted)" }}>
+        <p className="text-xs break-all muted">
           Anyone with this link can watch the clip: {shareUrl}
         </p>
       )}

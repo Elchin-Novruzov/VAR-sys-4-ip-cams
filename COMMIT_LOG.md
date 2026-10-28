@@ -5,6 +5,113 @@ as `padel_analytics/inout/COMMIT_LOG.md`.
 
 ---
 
+## 2026-10-28 — Rebranded as Padel Center Baku: the club's colours, logo and type, a brand front door
+
+The owner: rebrand the live VAR site with the padel center's colours and
+branding (padelcenter.az and their tournament poster), make it look
+official, with animations, effects and moving parts.
+
+**Brand, measured from padelcenter.az** (headless Chrome, computed styles
+and CSS variables): `--black #080808`, `--green #ceff65` (their lime
+buttons), `--brand-green #235834` (the wordmark), `#f3ea5d` (the ball);
+Satoshi + Bebas Neue + Inter. The site stays dark (the pictures are the
+point) and uses Bebas Neue for headings and Inter for text, both in the
+club's own stack and both OFL (`next/font/google`, fetched at build time
+and served by the site). Satoshi was left out: its licence is not OFL and
+the public repo would redistribute it.
+
+- **Tokens** (`app/globals.css`): background near-black, lime `--accent`
+  for primary actions / the playhead / the chosen option, the club green
+  `--accent-2` with lime text for "keep this" actions (Save, Copy share
+  link), `--ball`, `--live` red, status colours. Shared classes: `.display`,
+  `.eyebrow`, `.btn` + `.btn-accent` (a light sweeps across on hover) /
+  `.btn-brand` / `.btn-live` / `.btn-ghost`, `.seg[aria-pressed]` (speeds,
+  camera focus, timeline zoom: the inline `seg()` styles are gone), `.pill`,
+  `.dot` (pulses a ring like a broadcast light), `.tile-label`, `.card`,
+  `.glass`, `.field`, `.stage` (green glow behind the brand pages, never
+  behind the console), focus rings in lime. A `short:` variant for phones on
+  their side.
+- **Logo** (`public/brand/`): the club's secondary logo from their CDN with
+  the green wordmark turned cream for the dark UI (`logo-light.png`), the
+  ball monogram redrawn as `ball.svg`; app icons (192, 512, maskable, apple
+  180) are the ball on black. Manifest and titles: "Padel Center Baku · VAR
+  Replay", `PCB VAR`, per-page titles.
+- **Header**: logo (the ball alone on a phone) + a lime VAR tag, Courts /
+  Clips with a lime pill that slides to the open page (motion `layoutId`),
+  frosted black with a lime-to-green hairline; Sign out as an icon on a
+  phone.
+- **Login**: "Every point. Every angle." in Bebas over a padel court drawn
+  in perspective whose lines draw themselves while a ball rallies across the
+  net (SVG `animateMotion` with a short trail), a frosted sign-in card with
+  the logo, a ticker of what the product does along the bottom, and the
+  club's ball floating on large screens -- grab and throw it, it rolls and
+  springs back. Side by side on a landscape phone.
+- **Courts**: one wide card while the club has one court (the court
+  drawing beside the details from a laptop up), a grid for more. The card
+  leans toward the mouse with a lime light following it (mouse only); the
+  drawing marks each end camera that is streaming; VAR cameras as rows,
+  detector cameras as chips with "n/m streaming"; Replay (lime) and Live.
+- **Replay console**: colours, Bebas court name, the clock in Inter tabular
+  figures, lucide icons (frame steps, play/pause, ⟲ 10/30/60 s, timeline,
+  Save), Play as the one cream button, Live red with a white dot when at
+  the live edge and a pulsing red dot otherwise. Layout classes unchanged;
+  no motion library here, only CSS transitions on buttons. Scrubber: the
+  recorded span in club green, downloaded video lime, a glowing lime
+  playhead.
+- **Live**: the same strip, a Live pill, and a bouncing-ball "Connecting"
+  on each tile until its picture plays.
+- **Clips, clip, share**: brand headings, clip cards with a film icon and
+  hover lift, an empty state with the ball; players with icons and download
+  chips; the share page with the logo and a footer link to padelcenter.az.
+  A branded 404 ("Out of the court") and a bouncing-ball loading screen
+  between pages.
+- `config/courts.json`: club name "Padel Center Baku".
+- Libraries: `motion` 12.43.0 and `lucide-react` 1.56.0, pinned exactly
+  (motion 13/14 are under three weeks old).
+- `prefers-reduced-motion` stops every animation (CSS and motion).
+
+**Kept**: accessible names the audit uses (`Play`/`Pause`, `−10`, `1×`,
+`1m`); the clock got a `data-clock` hook (it had been found by
+`span.font-mono`), the frame-step buttons are `back one frame` / `forward
+one frame`, the replay-last ones `10s` -- `scripts/checks/replay-audit.mjs`
+updated to match (it still accepts the old names).
+
+**Verified**: `pnpm typecheck`, `pnpm lint` clean; `pnpm build` (pinned to
+six cores, low priority) and a standalone run on :3001 serving the
+self-hosted fonts, logo, icons and manifest. Screenshots of login, courts,
+replay, live, clips, clip, share and 404 at 390×844, 844×390, 820×1180,
+1180×820 and 1440×900: no horizontal scroll anywhere; the replay console
+still fits a 390×844 phone and an 844×390 landscape phone without
+scrolling. Phone audit (10 Mbps / 60 ms, 4.4 h test footage): open 2.3 s,
+tap 1.5 h back 1.0 s, drag back 2.4 s, −10 ≈ 1.0 s, frame steps 85–163 ms
+exactly −40 ms on both cameras, ⟲ 10s 1.0 s, −1 s 16–79 ms, heap 55 MB,
+all checks passed (same as 2026-10-21). Live tiles and clip playback were
+seen without video locally (no media server here, clip files live on the
+server). Not deployed yet.
+
+## 2026-10-26 — Detector cameras LIVE on the site: first camera recorded
+
+After `up -d --force-recreate mediamtx` on the server (the owner), the
+detector PC's 45 s test (`live_multi.py run --var --seconds 45`, this PC's
+camera, at home) was recorded: `/api/health` -> `"court1-det-local": 4`
+next to `court1-north` / `court1-south` (796 / 798 files, still growing after
+the recreate -- the club relay reconnected by itself). Detector PC CPU mean
+18 %. The replay / live tiles and Align on the real site are the owner's to
+look at (no production login from here).
+
+## 2026-10-26 — Deploy trap: a changed mediamtx.yml needs the media server recreated
+
+The owner deployed baa7111 with the usual commands; the detector PC's first
+`--var` run (45 s, one camera) reached the server but nothing was recorded,
+and a 2 s test publish to `court1-det-local` was refused ("I/O error" on
+open). `infra/mediamtx.yml` is a single-file bind mount
+(`./mediamtx.yml:/mediamtx.yml:ro`) into the prebuilt
+`bluenviron/mediamtx` image: `up -d --build mediamtx web` finds nothing to
+rebuild or recreate, and `git reset --hard` replaced the file with a new
+inode, so the running MediaMTX still has the old config without the four
+detector paths. Fix: `up -d --force-recreate mediamtx`. Written into
+HANDOVER §7, docs/DEPLOY.md and the CLAUDE.md lessons; no code change.
+
 ## 2026-10-26 — The in/out detector cameras as extra angles: live, replay, side by side, one clock
 
 The owner: the VAR site should also show the in/out system's detector
@@ -50,7 +157,10 @@ moment, all side by side.
   muxer failed ("extract_extradata"); `-flags +global_header` fixed it. A
   `next dev` Turbopack internal error hung one route's compile; a restart
   cleared it (not a code fault). `pnpm typecheck` / `pnpm lint` clean.
-- **Not deployed.** Shipping = export + the server commands (HANDOVER §7);
+- **Exported** to the public repo as `baa7111` (= padel-full 3956d5c; its
+  main was the last export 870f6f3, no Mac commits in between; secret scan:
+  only the templates' `USER:PASS` placeholders). **Not deployed** until the
+  owner runs the server commands (HANDOVER §7);
   the MediaMTX container must restart for the new paths. The detector PC
   needs `VAR_SERVER` and `VAR_PUBLISH_PASS` (= the server's `PUBLISH_PASS`)
   in `padel_analytics/inout/pi_relay/.env`.

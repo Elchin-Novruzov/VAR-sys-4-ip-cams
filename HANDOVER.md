@@ -21,7 +21,8 @@ anything at the club.
 | version on the server | the 2026-10-21 replay rework (public repo `c23b905` = private workspace `f430e7f`), deployed by the owner. Confirmed from outside: `/api/health` has the new `recordings` field. |
 | cameras | two court cameras, relayed from the club since 2026-09-04 by a PC at the club (scheduled task, survives reboots) |
 | replay | one continuous timeline per camera over the last 4 h (§4) |
-| **detector cameras** (2026-10-26, **not deployed yet**) | the in/out system's high-speed cameras as extra angles: the detector PC pushes them while it runs (`live_multi.py run --var`), they record and replay like the club's cameras, a per-camera clock offset lines both systems up (Align, §4 "Several camera systems"). Tested end to end on the dev PC; ship with §7. |
+| **detector cameras** (2026-10-26; deployed `baa7111` + MediaMTX recreated; first camera `court1-det-local` recorded the same day) | the in/out system's high-speed cameras as extra angles: the detector PC pushes them while it runs (`live_multi.py run --var`), they record and replay like the club's cameras, a per-camera clock offset lines both systems up (Align, §4 "Several camera systems"). Tested end to end on the dev PC; ship with §7. |
+| **look** (2026-10-28, not deployed yet) | rebranded as **Padel Center Baku**: the club's colours (near-black, lime `#ceff65`, green `#235834`, ball yellow), its logo and its heading face (Bebas Neue, with Inter), a brand login page and courts page with moving parts. The replay console only changed colour and icons; the phone audit passes with the 2026-10-21 numbers. Details: COMMIT_LOG 2026-10-28, "Look and brand" in §9. |
 | **open check** | `/api/health` on 2026-10-25 15:00 showed `"recordings": {"dir": "/recordings", "cameras": {}}` — the site sees the recordings folder, but it was empty. MediaMTX deletes camera folders once the last file is older than 4 h, so this most likely means **the cameras had not streamed for 4 h** (a Sunday; club PC or relay off). It can also mean the volume is mounted wrong. §8 "Replay shows nothing" has the two-minute check. Not verified yet: the new replay page with the real cameras. |
 
 ## 2. What it does (for the people using it)
@@ -193,6 +194,8 @@ picture on a phone on 4G, measured). Don't go back to it.
 | `components/scrubber.tsx` | the timeline bar with zoom chips |
 | `components/zoom-pan.tsx` | pinch / wheel zoom and pan on a picture |
 | `components/live-grid.tsx`, `clip-players.tsx`, `auto-reload.tsx` | live page, clip and share players, reload on a new build |
+| `app/globals.css` | the brand tokens (`:root`), touch sizing, and the shared classes: `.display`, `.btn` / `.btn-accent` / `.btn-brand`, `.seg`, `.pill`, `.dot`, `.card`, `.stage`, CSS animations |
+| `components/brand.tsx`, `components/motion.tsx`, `public/brand/` | the club's logo and ball, the court drawing, ticker and loader (server components); the nav pill, card tilt and draggable ball (motion, client) |
 | `app/api/replay/…` | playlist, init, segment, state routes (§6) |
 | `app/api/video/hls/…` | live HLS proxy |
 | `app/api/clips/…` | save, list, serve clips; public shared-clip files |
@@ -259,6 +262,16 @@ in `infra/mediamtx.yml`; `retentionHours` = `recordDeleteAfter`;
    ```
    `reset --hard` because older exports rewrote the history; `.env` is
    untracked and survives. Both compose files are always needed.
+   **If the change touched `infra/mediamtx.yml`, also run**
+   ```
+   docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostproxy.yml --env-file .env up -d --force-recreate mediamtx
+   ```
+   The file is a single-file bind mount into a prebuilt image: `up -d` sees
+   nothing to rebuild and leaves the old container running, and `git reset`
+   replaced the file (a new inode), so MediaMTX keeps the OLD config. Found
+   2026-10-26: the four detector paths were refused as unknown ("I/O error"
+   on publish) after a normal deploy. The recreate drops the club cameras for
+   a few seconds; the relay reconnects by itself.
 4. Check `https://72-62-236-90.sslip.io/api/health`, then the replay page.
 
 **Look at it** (on the server, in `/root/padel-var`, with both `-f` files):
@@ -318,6 +331,35 @@ Baseline, phone on 10 Mbps / 60 ms, 4.4 h test footage (2026-10-21):
 | −1 s / one frame inside played video | — | < 150 ms; frame steps exactly −40 ms on both cameras |
 | ⟲ 10 s from far back | — | ~1.0 s |
 | playlist traffic in a session | — | < 100 KB |
+
+Re-measured after the rebrand (2026-10-28, same setup): open 2.3 s, far tap
+1.0 s, drag 2.4 s, −10 ≈ 1.0 s, frame steps 85–163 ms, all checks passed.
+
+### Look and brand (since 2026-10-28)
+
+The site wears **Padel Center Baku**'s brand, taken from padelcenter.az:
+`--bg` near-black, `--accent` lime `#ceff65` (primary actions, the
+playhead, the chosen option), `--accent-2` the club green `#235834` with lime
+text (Save, Copy share link), `--ball` `#f3ea5d`, `--live` red. Headings use
+`.display` (Bebas Neue, upper case); text is Inter. Both come from
+`next/font/google` in `app/layout.tsx` (downloaded at build time, served by
+the site). The logo files in `public/brand/` come from the club's CDN:
+`logo-light.png` is their secondary logo with the green wordmark turned
+cream for the dark UI; `ball.svg` is the monogram redrawn; the app icons are
+the ball on black.
+
+- The custom classes in `globals.css` are **not** in a Tailwind layer, so
+  they beat Tailwind utilities: override them with `!` utilities
+  (`!min-h-9`, `!px-3`), as the existing console already does for buttons.
+- `motion` (the animation library) runs on the brand pages only: the header
+  nav pill, the court card tilt, the login ball. **Keep it out of the replay
+  console**: there only CSS transitions on buttons and the pulsing dot.
+  Everything animated stops for `prefers-reduced-motion`.
+- `scripts/checks/replay-audit.mjs` finds the clock by `[data-clock]` and the
+  buttons by their accessible names (`Play`/`Pause`, `back one frame`,
+  `10s`, `−10`, `1×`, `1m`): keep those when restyling.
+- Viewer-facing text keeps the framing: replay for disputes, never line
+  calling.
 
 ## 10. Known limits and open items
 
@@ -381,4 +423,5 @@ Open, roughly in order:
 | 2026-09-04 | club visit: relay running and reboot-proof over the PC's Wi‑Fi; real network mapped; relay URL bug fixed; replay windows streamed via MSE |
 | 2026-10-21 | the owner: rolling back "doesn't work, slow, laggy". Audit measured why; replay rebuilt as one HLS timeline over the recording files; 11 bugs found and fixed while driving it (COMMIT_LOG); exported and deployed |
 | 2026-10-25 | this handover; docs brought up to date; `scripts/checks/` committed |
-| 2026-10-26 | the in/out detector cameras as extra angles: N-camera grid, VAR / Detector focus, per-camera clock offsets + Align, detector uplink from `live_multi.py --var`; tested on the dev PC, not deployed |
+| 2026-10-26 | the in/out detector cameras as extra angles: N-camera grid, VAR / Detector focus, per-camera clock offsets + Align, detector uplink from `live_multi.py --var`; deployed (MediaMTX recreated), first detector camera recorded on the server |
+| 2026-10-28 | rebranded as Padel Center Baku (colours, logo, fonts, brand login and courts pages, icons on every control); not deployed yet |

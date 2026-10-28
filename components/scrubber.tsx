@@ -141,12 +141,7 @@ export function Scrubber({
             <button
               key={z.label}
               onClick={() => chooseSpan(z.ms)}
-              className="!min-h-7 !text-xs px-2 rounded-full whitespace-nowrap"
-              style={{
-                background: z.ms === selected ? "var(--accent)" : "transparent",
-                color: z.ms === selected ? "#06202b" : undefined,
-                border: "1px solid var(--line)",
-              }}
+              className="seg !min-h-7 !text-xs px-2 !rounded-full whitespace-nowrap"
               aria-pressed={z.ms === selected}
             >
               {z.label}
@@ -179,8 +174,8 @@ export function Scrubber({
             style={{
               left: `min(max(${pct(shown)}%, 2.2rem), calc(100% - 2.2rem))`,
               transform: "translateX(-50%)",
-              background: "var(--text)",
-              color: "#06202b",
+              background: "var(--accent)",
+              color: "var(--on-accent)",
             }}
           >
             {fmtClock(shown)}
@@ -202,8 +197,9 @@ export function Scrubber({
           onPointerCancel={end}
           onPointerLeave={() => !drag && setHover(null)}
         >
-          {bars(ranges, "r", "var(--accent-2)", 0.45)}
-          {bars(buffered, "b", "#d1fae5", 0.55)}
+          {/* recorded: the club's green; downloaded: lime over it */}
+          {bars(ranges, "r", "#2f7a47", 0.75)}
+          {bars(buffered, "b", "var(--accent)", 0.35)}
           {ticks.map((t) => (
             <div key={t} className="absolute top-0 bottom-0 w-px" style={{ left: `${pct(t)}%`, background: "var(--line)" }} />
           ))}
@@ -212,7 +208,7 @@ export function Scrubber({
               <div className="absolute top-0 bottom-0 w-0.5 -ml-px" style={{ left: `${pct(head)}%`, background: "var(--accent)" }} />
               <div
                 className="absolute top-1/2 w-3.5 h-3.5 -ml-[7px] -mt-[7px] rounded-full"
-                style={{ left: `${pct(head)}%`, background: "var(--accent)", boxShadow: "0 0 0 2px #06202b" }}
+                style={{ left: `${pct(head)}%`, background: "var(--accent)", boxShadow: "0 0 0 2px var(--bg), 0 0 12px rgba(206, 255, 101, 0.7)" }}
               />
             </>
           )}

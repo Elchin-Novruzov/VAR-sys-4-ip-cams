@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { LogOut } from "lucide-react";
 import { auth, signOut } from "@/auth";
+import { Ball, Logo } from "@/components/brand";
+import { NavLinks } from "@/components/motion";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -12,30 +15,25 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="min-h-dvh flex flex-col">
       <header
-        className="app-header sticky top-0 z-20 flex items-center gap-3 px-3 sm:px-4"
-        style={{
-          height: "var(--app-header)",
-          background: "var(--panel)",
-          borderBottom: "1px solid var(--line)",
-          paddingTop: "env(safe-area-inset-top)",
-        }}
+        className="app-header sticky top-0 z-20 flex items-center gap-2 sm:gap-4 px-3 sm:px-5"
+        style={{ height: "var(--app-header)", paddingTop: "env(safe-area-inset-top)" }}
       >
-        <Link href="/courts" className="font-semibold tracking-tight">
-          Padel VAR
+        <Link href="/courts" className="flex items-center gap-2.5 shrink-0" aria-label="Padel Center Baku VAR, courts">
+          {/* the full logo from a small tablet up, the ball alone on a phone */}
+          <Ball size={30} className="sm:hidden" />
+          <Logo height={30} className="hidden sm:block" />
+          <span className="display text-[0.95rem] leading-none px-2 pt-[0.2rem] pb-[0.1rem] rounded-md bg-[var(--accent)] text-[var(--on-accent)]">
+            VAR
+          </span>
         </Link>
-        <nav className="flex gap-1 text-sm">
-          <Link href="/courts" className="px-3 py-2 rounded-lg hover:bg-white/5">
-            Courts
-          </Link>
-          <Link href="/clips" className="px-3 py-2 rounded-lg hover:bg-white/5">
-            Clips
-          </Link>
-        </nav>
-        <div className="ml-auto flex items-center gap-3 text-sm" style={{ color: "var(--muted)" }}>
-          <span className="hidden sm:inline">{session?.user?.email}</span>
+        <span className="hidden sm:block h-6 w-px bg-[var(--line)]" aria-hidden />
+        <NavLinks />
+        <div className="ml-auto flex items-center gap-3 text-sm muted">
+          <span className="hidden md:inline truncate max-w-56">{session?.user?.email}</span>
           <form action={logout}>
-            <button type="submit" className="text-sm !min-h-9">
-              Sign out
+            <button type="submit" className="btn btn-ghost !min-h-9 !px-3 text-sm" aria-label="Sign out" title="Sign out">
+              <LogOut className="icon" aria-hidden />
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </form>
         </div>

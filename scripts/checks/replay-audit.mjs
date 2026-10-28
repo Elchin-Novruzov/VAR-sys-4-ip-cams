@@ -113,7 +113,7 @@ const st = () =>
         w: x.videoWidth,
         rate: x.playbackRate,
       })),
-      clock: document.querySelector("span.font-mono")?.textContent ?? "",
+      clock: (document.querySelector("[data-clock]") ?? document.querySelector("span.font-mono"))?.textContent ?? "",
       spinners: tiles[0] ? tiles[0].querySelectorAll('[aria-label="loading"]').length : 0,
     };
   });
@@ -215,7 +215,7 @@ const steps = [];
 const moved = [];
 for (let i = 0; i < 5; i++) {
   s0 = Date.now();
-  await page.getByRole("button", { name: "◀", exact: true }).click();
+  await page.getByRole("button", { name: /^(◀|back one frame)$/ }).click();
   r = await until((x) => shown(x) && clockMs(x.clock) < prev - 20, 5000);
   const c = clockMs(r.x.clock);
   await page.waitForTimeout(120);
@@ -247,7 +247,7 @@ await page.getByRole("button", { name: "1×", exact: true }).click();
 // 7. replay the last 10 s from far away
 bytes = 0;
 s0 = Date.now();
-await page.getByRole("button", { name: "⟲ 10s", exact: true }).click();
+await page.getByRole("button", { name: /^(⟲ )?10s$/ }).click();
 ({ from, to } = await range());
 r = await until(
   (x) => shown(x) && !x.v[0].paused && x.spinners === 0 && Math.abs(clockMs(x.clock) - asClock(to - 10000)) < 4000,

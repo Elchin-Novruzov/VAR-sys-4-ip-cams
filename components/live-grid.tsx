@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, History } from "lucide-react";
 import type Hls from "hls.js";
 import type { CourtConfig } from "@/lib/types";
 import { ZoomPan } from "./zoom-pan";
+import { BallLoader } from "./brand";
 
 /** Live view over the proxied HLS stream. Safari plays HLS natively;
  *  everyone else gets hls.js. Latency is a few seconds; the point of the
@@ -12,6 +14,7 @@ import { ZoomPan } from "./zoom-pan";
 export function HlsPlayer({ src, className }: { src: string; className?: string }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
     const video = ref.current;
@@ -50,9 +53,21 @@ export function HlsPlayer({ src, className }: { src: string; className?: string 
 
   return (
     <div className="relative w-full h-full">
-      <video ref={ref} muted playsInline autoPlay className={className ?? "w-full h-full object-contain bg-black"} />
+      <video
+        ref={ref}
+        muted
+        playsInline
+        autoPlay
+        onPlaying={() => setPlaying(true)}
+        className={className ?? "w-full h-full object-contain bg-black"}
+      />
+      {!playing && !err && (
+        <div className="absolute inset-0 grid place-items-center pointer-events-none">
+          <BallLoader label="Connecting" className="scale-75" />
+        </div>
+      )}
       {err && (
-        <div className="absolute inset-0 grid place-items-center text-sm bg-black/60 p-4 text-center" style={{ color: "#fca5a5" }}>
+        <div className="absolute inset-0 grid place-items-center text-sm bg-black/60 p-4 text-center" style={{ color: "var(--danger-text)" }}>
           {err}
         </div>
       )}
@@ -71,17 +86,18 @@ function liveGridFor(n: number): string {
 
 export function LiveGrid({ court }: { court: CourtConfig }) {
   return (
-    <div className="flex flex-col overflow-y-auto" style={{ height: "calc(100dvh - var(--app-header))" }}>
+    <div className="flex flex-col overflow-y-auto fade" style={{ height: "calc(100dvh - var(--app-header))" }}>
       <div className="shrink-0 flex items-center gap-2 px-2 sm:px-3 py-1.5" style={{ borderBottom: "1px solid var(--line)" }}>
-        <Link href="/courts" className="text-sm px-1" style={{ color: "var(--muted)" }} aria-label="back to courts">
-          ‹
+        <Link href="/courts" className="grid place-items-center h-9 w-9 rounded-full muted hover:!text-[var(--accent)]" aria-label="back to courts">
+          <ChevronLeft className="icon" aria-hidden />
         </Link>
-        <span className="font-semibold truncate min-w-0 flex-1">{court.name} · live</span>
-        <Link
-          href={`/courts/${court.slug}`}
-          className="ml-auto px-3 py-2 rounded-xl text-sm font-semibold whitespace-nowrap"
-          style={{ background: "var(--accent)", color: "#06202b" }}
-        >
+        <h1 className="display text-2xl sm:text-[1.7rem] pt-0.5 truncate min-w-0">{court.name}</h1>
+        <span className="pill pill-live">
+          <span className="dot live" />
+          Live
+        </span>
+        <Link href={`/courts/${court.slug}`} className="btn btn-accent ml-auto !min-h-10 text-sm">
+          <History className="icon" aria-hidden />
           Replay
         </Link>
       </div>
@@ -95,15 +111,15 @@ export function LiveGrid({ court }: { court: CourtConfig }) {
             <ZoomPan className="w-full h-full">
               <HlsPlayer src={`/api/video/hls/${encodeURIComponent(cam.path)}/index.m3u8`} />
             </ZoomPan>
-            <div className="absolute left-2 top-2 text-xs px-2 py-1 rounded bg-black/60 pointer-events-none">
+            <div className="absolute left-2 top-2 tile-label pointer-events-none">
               {cam.label}
             </div>
           </div>
         ))}
       </div>
       <p
-        className="shrink-0 text-xs px-3 py-1.5"
-        style={{ color: "var(--muted)", paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}
+        className="shrink-0 text-xs px-3 py-1.5 muted"
+        style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}
       >
         Live runs a few seconds behind the court. For anything disputed, use replay.
       </p>

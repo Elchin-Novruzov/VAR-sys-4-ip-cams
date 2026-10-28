@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BookmarkPlus, ChartGantt, ChevronLeft, Pause, Play, RotateCcw, StepBack, StepForward } from "lucide-react";
 import type { CameraConfig, CourtConfig } from "@/lib/types";
 import { fmtClock } from "@/lib/time";
 import { CameraPlayer, pickEngine, type Engine, type WallRange } from "@/lib/replay-player";
@@ -704,13 +705,6 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
   const alignOff = align.camera && draftTick >= 0 ? currentOffset(align.camera) : 0;
   const alignUnsaved = align.camera ? drafts.current[align.camera] !== undefined : false;
 
-  const seg = (active: boolean) =>
-    ({
-      background: active ? "var(--accent)" : "transparent",
-      color: active ? "#06202b" : undefined,
-      border: "1px solid var(--line)",
-    }) as const;
-
   return (
     <div className="console flex flex-col overflow-y-auto select-none" style={{ height: "calc(100dvh - var(--app-header))" }}>
       {/* top strip: name, clock and status on one row; on narrow screens the
@@ -719,24 +713,24 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
         className="shrink-0 flex flex-wrap items-center gap-x-2 gap-y-1 px-2 sm:px-3 py-1.5"
         style={{ borderBottom: "1px solid var(--line)" }}
       >
-        <Link href="/courts" className="text-sm px-1" style={{ color: "var(--muted)" }} aria-label="back to courts">
-          ‹
+        <Link href="/courts" className="grid place-items-center h-8 w-8 -ml-1 rounded-full muted hover:!text-[var(--accent)]" aria-label="back to courts">
+          <ChevronLeft className="icon" aria-hidden />
         </Link>
-        <span className="font-semibold truncate min-w-0">{court.name}</span>
-        <span className="font-mono text-sm tabular-nums flex-1 min-w-0 text-right sm:text-left sm:flex-none">
+        <span className="display text-xl sm:text-2xl pt-0.5 truncate min-w-0">{court.name}</span>
+        <span
+          data-clock
+          className="text-sm sm:text-base font-semibold tabular-nums flex-1 min-w-0 text-right sm:text-left sm:flex-none tracking-tight"
+        >
           {wall !== null ? `${fmtClock(wall)}.${centis}` : "--:--:--"}
         </span>
-        <span
-          className="text-xs px-2 py-0.5 rounded-full whitespace-nowrap"
-          style={{ background: ui.until ? "#0f2f1f" : "#3b1114", color: ui.until ? "#86efac" : "#fca5a5" }}
-        >
+        <span className={`pill ${ui.until ? "pill-ok" : "pill-bad"}`}>
           {ui.until ? `until ${fmtClock(ui.until)}` : anyRecording ? "loading" : "no recording"}
         </span>
         {here.length > 1 && (
           <div className="flex gap-1 basis-full sm:basis-auto sm:ml-auto items-center">
             <button
-              className="!text-xs !min-h-8 px-2 flex-1 sm:flex-none whitespace-nowrap"
-              style={seg(focusNow === "all")}
+              className="seg !text-xs !min-h-8 px-2 flex-1 sm:flex-none whitespace-nowrap"
+              aria-pressed={focusNow === "all"}
               onClick={() => setFocus("all")}
             >
               {here.length === 2 ? "Both" : "All"}
@@ -745,8 +739,8 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
               groups.map((g) => (
                 <button
                   key={g}
-                  className="!text-xs !min-h-8 px-2 flex-1 sm:flex-none whitespace-nowrap"
-                  style={seg(focus === `group:${g}`)}
+                  className="seg !text-xs !min-h-8 px-2 flex-1 sm:flex-none whitespace-nowrap"
+                  aria-pressed={focus === `group:${g}`}
                   onClick={() => setFocus(`group:${g}`)}
                 >
                   {g === "var" ? "VAR" : "Detector"}
@@ -756,8 +750,8 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
               here.map((cam) => (
                 <button
                   key={cam.path}
-                  className="!text-xs !min-h-8 px-2 flex-1 sm:flex-none min-w-0 truncate"
-                  style={seg(focus === cam.path)}
+                  className="seg !text-xs !min-h-8 px-2 flex-1 sm:flex-none min-w-0 truncate"
+                  aria-pressed={focus === cam.path}
                   onClick={() => setFocus(cam.path)}
                 >
                   {cam.label}
@@ -766,8 +760,12 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
             ) : (
               <select
                 aria-label="show one camera"
-                className="!text-xs !min-h-8 px-1 flex-1 sm:flex-none min-w-0 rounded"
-                style={seg(here.some((c) => c.path === focus))}
+                className="!text-xs !min-h-8 px-1 flex-1 sm:flex-none min-w-0 rounded-lg"
+                style={
+                  here.some((c) => c.path === focus)
+                    ? { background: "var(--accent)", color: "var(--on-accent)", borderColor: "transparent" }
+                    : { background: "transparent" }
+                }
                 value={here.some((c) => c.path === focus) ? focus : ""}
                 onChange={(e) => e.target.value && setFocus(e.target.value)}
               >
@@ -780,8 +778,8 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
               </select>
             )}
             <button
-              className="!text-xs !min-h-8 px-2 whitespace-nowrap"
-              style={seg(align.open)}
+              className="seg !text-xs !min-h-8 px-2 whitespace-nowrap"
+              aria-pressed={align.open}
               onClick={() => (align.open ? setAlign((a) => ({ ...a, open: false })) : openAlign())}
               title="Line a camera up with the others"
             >
@@ -792,7 +790,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
       </div>
 
       {(infoError || engine === null) && (
-        <div className="shrink-0 text-sm px-3 py-1.5" style={{ background: "#3b1114", color: "#fca5a5" }}>
+        <div className="alert shrink-0 text-sm px-3 py-1.5">
           {engine === null ? "This browser cannot play the replay stream." : infoError}
         </div>
       )}
@@ -838,8 +836,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
             </button>
           ))}
           <button
-            className="!text-xs !min-h-8 px-2 font-semibold"
-            style={{ background: "var(--accent-2)", color: "#03200f", border: "none" }}
+            className="btn-brand !text-xs !min-h-8 px-2"
             disabled={!alignUnsaved || align.busy}
             onClick={() => void saveAlign()}
           >
@@ -877,7 +874,7 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
                   className="w-full h-full object-contain"
                 />
               </ZoomPan>
-              <div className="absolute left-2 top-2 text-xs px-2 py-1 rounded bg-black/60 pointer-events-none">
+              <div className="absolute left-2 top-2 tile-label pointer-events-none">
                 {cam.label}
                 {cam.fps > 30 ? ` · ${cam.fps} fps` : ""}
                 {align.open && align.camera === cam.path ? " · aligning" : ""}
@@ -935,19 +932,21 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
             <button onClick={() => nudge(-1)} disabled={!ready} title="back one second (Shift+←)">
               −1s
             </button>
-            <button onClick={() => step(-1)} disabled={!ready} title="back one frame (←)">
-              ◀
+            <button onClick={() => step(-1)} disabled={!ready} title="back one frame (←)" aria-label="back one frame">
+              <StepBack className="icon" aria-hidden />
             </button>
             <button
               onClick={togglePlay}
               disabled={!ready}
-              className="play-btn font-semibold min-w-16 sm:min-w-20"
-              style={{ background: "var(--panel-2)" }}
+              className="play-btn font-semibold min-w-16 sm:min-w-24 inline-flex items-center justify-center gap-1.5"
+              style={{ background: "var(--text)", color: "var(--bg)", borderColor: "transparent" }}
+              aria-label={ui.playing ? "Pause" : "Play"}
             >
-              {ui.playing ? "Pause" : "Play"}
+              {ui.playing ? <Pause className="icon" aria-hidden fill="currentColor" /> : <Play className="icon" aria-hidden fill="currentColor" />}
+              <span className="hidden sm:inline">{ui.playing ? "Pause" : "Play"}</span>
             </button>
-            <button onClick={() => step(1)} disabled={!ready} title="forward one frame (→)">
-              ▶
+            <button onClick={() => step(1)} disabled={!ready} title="forward one frame (→)" aria-label="forward one frame">
+              <StepForward className="icon" aria-hidden />
             </button>
             <button onClick={() => nudge(1)} disabled={!ready} title="forward one second (Shift+→)">
               +1s
@@ -963,27 +962,27 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
                 key={s}
                 onClick={() => replayLast(s)}
                 disabled={!ready}
-                className="font-semibold whitespace-nowrap"
-                style={{ background: "var(--accent)", color: "#06202b", border: "none" }}
+                className="btn-accent whitespace-nowrap inline-flex items-center gap-1"
                 title={`Replay the last ${s} seconds`}
               >
-                ⟲ {s}s
+                <RotateCcw className="icon" aria-hidden />
+                {s}s
               </button>
             ))}
             <button
               onClick={goLive}
               disabled={!ready}
-              className="font-semibold whitespace-nowrap"
-              style={atLive ? { background: "#b91c1c", color: "#fff", border: "none" } : undefined}
+              className={`font-semibold whitespace-nowrap inline-flex items-center gap-1.5 ${atLive ? "btn-live" : ""}`}
               title="Back to the newest moment (End)"
             >
-              ● Live
+              <span className={`dot ${atLive ? "" : "live"}`} style={atLive ? { background: "#fff" } : undefined} />
+              Live
             </button>
           </div>
 
           <div className="flex items-center gap-1">
             {SPEEDS.map((s) => (
-              <button key={s} onClick={() => changeRate(s)} disabled={!ready} className="text-sm" style={seg(rate === s)}>
+              <button key={s} onClick={() => changeRate(s)} disabled={!ready} className="seg text-sm" aria-pressed={rate === s}>
                 {s}×
               </button>
             ))}
@@ -991,16 +990,18 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
               onClick={() => setScrubVisible((v) => !v)}
               className="text-sm ml-1"
               title="show or hide the timeline"
+              aria-label="timeline"
               aria-pressed={scrubVisible}
+              style={scrubVisible ? undefined : { color: "var(--muted)" }}
             >
-              ⌁
+              <ChartGantt className="icon" aria-hidden />
             </button>
             <button
               onClick={saveMoment}
               disabled={!ready || save.status === "saving"}
-              className="font-semibold whitespace-nowrap"
-              style={{ background: "var(--accent-2)", color: "#03200f", border: "none" }}
+              className="btn-brand whitespace-nowrap inline-flex items-center gap-1.5"
             >
+              <BookmarkPlus className="icon" aria-hidden />
               {save.status === "saving" ? "Saving…" : "Save"}
             </button>
           </div>
@@ -1009,13 +1010,13 @@ export function ReplayConsole({ court }: { court: CourtConfig }) {
         {save.status === "done" && (
           <div className="text-sm">
             Saved.{" "}
-            <a className="underline" href={`/clips/${save.id}`}>
+            <a className="underline text-[var(--accent)]" href={`/clips/${save.id}`}>
               Open the clip
             </a>
           </div>
         )}
         {save.status === "error" && (
-          <div className="text-sm" style={{ color: "#fca5a5" }}>
+          <div className="text-sm" style={{ color: "var(--danger-text)" }}>
             Could not save: {save.msg}
           </div>
         )}
