@@ -22,7 +22,8 @@ anything at the club.
 | cameras | two court cameras, relayed from the club since 2026-09-04 by a PC at the club (scheduled task, survives reboots) |
 | replay | one continuous timeline per camera over the last 4 h (§4) |
 | **detector cameras** (2026-10-26; deployed `baa7111` + MediaMTX recreated; first camera `court1-det-local` recorded the same day) | the in/out system's high-speed cameras as extra angles: the detector PC pushes them while it runs (`live_multi.py run --var`), they record and replay like the club's cameras, a per-camera clock offset lines both systems up (Align, §4 "Several camera systems"). Tested end to end on the dev PC; ship with §7. |
-| **look** (2026-10-28; exported as public `503026f` with the VAR review round, waiting for the owner's deploy) | rebranded as **Padel Center Baku**: the club's colours (near-black, lime `#ceff65`, green `#235834`, ball yellow), its logo and its heading face (Bebas Neue, with Inter), a brand login page and courts page with moving parts. The replay console only changed colour and icons; the phone audit passes with the 2026-10-21 numbers. Details: COMMIT_LOG 2026-10-28, "Look and brand" in §9. |
+| **look** (2026-10-28; exported as public `c9dd5d9` with the VAR review and the phone/iPad rounds, waiting for the owner's deploy) | rebranded as **Padel Center Baku**: the club's colours (near-black, lime `#ceff65`, green `#235834`, ball yellow), its logo and its heading face (Bebas Neue, with Inter), a brand login page and courts page with moving parts. The replay console only changed colour and icons; the phone audit passes with the 2026-10-21 numbers. Details: COMMIT_LOG 2026-10-28, "Look and brand" in §9. |
+| **detector cameras of any name** (2026-11-03; waiting for the owner's deploy, **with** the MediaMTX recreate of §7) | the kit's cameras at any court join their court as `court1-det-<name>` without a config edit, and an open live page adds and drops their tiles by itself (§4 "Several camera systems"). The in/out project's one-click app sends them with one tick. |
 | **open check** | `/api/health` on 2026-10-25 15:00 showed `"recordings": {"dir": "/recordings", "cameras": {}}` — the site sees the recordings folder, but it was empty. MediaMTX deletes camera folders once the last file is older than 4 h, so this most likely means **the cameras had not streamed for 4 h** (a Sunday; club PC or relay off). It can also mean the volume is mounted wrong. §8 "Replay shows nothing" has the two-minute check. Not verified yet: the new replay page with the real cameras. |
 
 ## 2. What it does (for the people using it)
@@ -169,10 +170,20 @@ OV9281 120 fps ─► live_court.py capture ffmpeg ─┬─► detector + lossl
                                                      ─RTMP─► MediaMTX court1-det-<name> (recorded like the rest)
 ```
 
-- Paths: `court1-det-local`, `-pi3cam1`, `-cam1`, `-cam2` (the detector's
-  camera names), `group: "detector"`, `fps: 60` in `config/courts.json`;
-  same names under `paths:` in `infra/mediamtx.yml`. The publish user is the
-  club relay's (`cam` + `PUBLISH_PASS`, path rule `~^court`).
+- Paths: `court1-det-<camera name>`. Since 2026-11-03 **any** name: the kit
+  goes to other courts with other cameras (the in/out project's Court
+  Control app names them). MediaMTX takes them through one regex path,
+  `~^court[0-9]+-det-[a-z0-9][a-z0-9_-]{0,23}$`, and `lib/courts.ts` adds a
+  detector camera to its court once it is publishing or has recordings
+  (`Detector · <name>`, `fps: 60`). `config/courts.json` lists the club's
+  four (`-local`, `-pi3cam1`, `-cam1`, `-cam2`) only for their labels. The
+  publish user is the club relay's (`cam` + `PUBLISH_PASS`, path rule
+  `~^court`).
+- The live page asks `GET /api/live/cameras?court=` every 6 s and refreshes
+  itself when the list changes: a detector camera's tile appears within
+  seconds of the run starting and goes when it stops, with no reload (the
+  club's tiles keep playing). Measured 2026-11-03 on the dev PC with the app
+  driving a two-camera run: see COMMIT_LOG.
 - **Why an offset:** a recording's wall clock is when the stream reached
   MediaMTX; the club cameras come camera → NVR → relay PC → internet, the
   detector cameras camera → PC encode → internet, a second or more apart.
@@ -268,6 +279,7 @@ Media Source.
 | `/api/replay/<camera>/init/<hash>.mp4` | session | init section |
 | `/api/replay/<camera>/seg/<file>/<from>-<to>.m4s` | session | media segment |
 | `/api/video/hls/<camera>/<file>` | session | live HLS from MediaMTX |
+| `/api/live/cameras?court=<slug>` | session | the cameras the live page shows now (the club's + the publishing detector cameras); the page polls it every 6 s |
 | `/api/clips` (GET, POST), `/api/clips/<id>/file?camera=` | session | clips |
 
 ## 7. Operating it
@@ -345,7 +357,8 @@ decides what is pushed.
 | Something odd only on an iPhone / iPad | untested engine path | try the page with `?engine=native`, then `?engine=hls`; report which works |
 | Stutter with both cameras on a phone | two 4 Mbps streams need ~9 Mbps | focus one camera ("North end" / "South end"); lasting fix in §10 |
 | South end smears fast balls | channel 8 shutter still automatic | next club visit, §10 |
-| No detector tiles | the detector PC is not publishing (or has not in the last 4 h) | on that PC: `live_multi.py run ... --var` with `VAR_SERVER` / `VAR_PUBLISH_PASS` in `pi_relay/.env`; `… logs mediamtx` shows `is publishing to path 'court1-det-…'` |
+| No detector tiles | the detector PC is not publishing (or has not in the last 4 h) | on that PC: Court Control, Live & record, "Show them on the VAR site too" (or `live_multi.py run ... --var`), with the VAR server and publish password in its Settings; `… logs mediamtx` shows `is publishing to path 'court1-det-…'` |
+| A detector camera with a new name is refused (`… logs mediamtx`: "path '…' is not configured") | MediaMTX still runs the config from before 2026-11-03 (four fixed names) | the `--force-recreate mediamtx` step of §7 |
 | Detector tile stutters or freezes, the detector itself fine | the club's upload cannot carry the streams (the `fifo` drops) | lower `--var-kbps` / `--var-fps` on the detector PC; check the club's upload speed |
 | Detector and club cameras show different moments | offsets not set, or changed (a relay restart) | Align on the replay page, Save for everyone |
 
@@ -498,3 +511,4 @@ Open, roughly in order:
 | 2026-10-25 | this handover; docs brought up to date; `scripts/checks/` committed |
 | 2026-10-26 | the in/out detector cameras as extra angles: N-camera grid, VAR / Detector focus, per-camera clock offsets + Align, detector uplink from `live_multi.py --var`; deployed (MediaMTX recreated), first detector camera recorded on the server |
 | 2026-10-28 | rebranded as Padel Center Baku (colours, logo, fonts, brand login and courts pages, icons on every control); then the VAR review (incidents, rock / loop, save sheet, broadcast badges), live sync + instant replay, the control-room courts page; live page back on hls.js in Chrome |
+| 2026-11-03 | detector cameras of ANY name (other courts, more Pis): MediaMTX regex path, listed by `lib/courts.ts` when publishing or recorded; the live page adds and drops their tiles by itself; the in/out project's Court Control app sends them with one tick |

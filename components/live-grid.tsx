@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, History, RotateCcw } from "lucide-react";
 import type Hls from "hls.js";
@@ -27,6 +28,10 @@ const SYNC_OK_MS = 120;
 const SYNC_EASE_MS = 40;
 /** A tile whose camera is not streaming asks again this often. */
 const LIVE_RETRY_MS = 5000;
+/** How often the page asks which cameras to show: the detector PC's
+ *  high-speed cameras join an open page when its run starts, and leave when
+ *  it stops. */
+const CAMERAS_EVERY_MS = 6000;
 const NO_HLS = "This browser cannot play the live stream.";
 const SYNC_JUMP_MS = 2500;
 
@@ -154,7 +159,9 @@ function liveGridFor(n: number): string {
   if (n <= 1) return "grid-cols-1 grid-rows-1";
   if (n === 2) return "portrait:grid-rows-2 portrait:grid-cols-1 landscape:grid-cols-2 landscape:grid-rows-1";
   if (n <= 4) return "grid-cols-2 grid-rows-2";
-  return "portrait:grid-cols-2 portrait:grid-rows-3 landscape:grid-cols-3 landscape:grid-rows-2";
+  if (n <= 6) return "portrait:grid-cols-2 portrait:grid-rows-3 landscape:grid-cols-3 landscape:grid-rows-2";
+  // the club's two and up to seven high-speed cameras of the whole court
+  return "portrait:grid-cols-2 landscape:grid-cols-3 auto-rows-fr";
 }
 
 export function LiveGrid({ court }: { court: CourtConfig }) {
@@ -162,6 +169,27 @@ export function LiveGrid({ court }: { court: CourtConfig }) {
   /** Spread between the tiles' pictures (ms), null while fewer than two play
    *  or the streams carry no dates. */
   const [spread, setSpread] = useState<number | null>(null);
+  const router = useRouter();
+  const shown = court.cameras.map((c) => c.path).join(",");
+  const highSpeed = court.cameras.filter((c) => c.group === "detector").length;
+
+  useEffect(() => {
+    // a high-speed camera started or stopped: the server page gives the new
+    // list; the tiles already playing keep playing (same keys)
+    const check = async () => {
+      if (document.hidden) return;
+      try {
+        const res = await fetch(`/api/live/cameras?court=${encodeURIComponent(court.slug)}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const { cameras } = (await res.json()) as { cameras: string[] };
+        if (cameras.join(",") !== shown) router.refresh();
+      } catch {
+        // offline for a moment: ask again next time
+      }
+    };
+    const t = setInterval(() => void check(), CAMERAS_EVERY_MS);
+    return () => clearInterval(t);
+  }, [court.slug, shown, router]);
 
   useEffect(() => {
     // browser tests (and ?debug on any build) can read the tiles' clocks
@@ -231,6 +259,11 @@ export function LiveGrid({ court }: { court: CourtConfig }) {
           <span className="dot live" />
           Live
         </span>
+        {highSpeed > 0 && (
+          <span className="pill pill-quiet hidden sm:inline-flex" title="The in/out system's high-speed cameras, sent by the detector PC while it runs">
+            +{highSpeed} high-speed
+          </span>
+        )}
         {spread !== null && (
           <span
             className={`pill tabular-nums ${spread <= SYNC_OK_MS ? "pill-ok" : "pill-quiet"}`}

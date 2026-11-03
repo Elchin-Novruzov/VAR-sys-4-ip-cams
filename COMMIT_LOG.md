@@ -5,6 +5,46 @@ as `padel_analytics/inout/COMMIT_LOG.md`.
 
 ---
 
+## 2026-11-03 — The high-speed cameras of any court on the live page, by themselves
+
+The owner, while the in/out project's one-click app (Padel Court Control,
+`padel_analytics/inout/court_app/`) was being built: "also connect it to the
+live VAR site, so we can see the cameras above and the high-fps cameras
+together when we run the high-fps cameras". The app sends them with one tick
+(`live_multi.py run --var`, since 2026-10-26); two things on this side kept
+that from working everywhere:
+
+- **Only four names existed.** MediaMTX had exactly `court1-det-local`,
+  `-pi3cam1`, `-cam1`, `-cam2`, and the site only knew cameras listed in
+  `config/courts.json`. The kit goes to other courts with other cameras
+  (the app names them: `local2`, `cam3`, `pi5bcam1` ...), and those were
+  refused. Now `infra/mediamtx.yml` has one regex path,
+  `~^court[0-9]+-det-[a-z0-9][a-z0-9_-]{0,23}$`, and `lib/courts.ts` adds a
+  detector camera to its court once it is publishing (MediaMTX API) or has a
+  recordings folder (re-checked every 5 s, with a 2 s timeout on the API
+  call). `getCourt(s)` is what every page and route reads, so live, replay,
+  clips, offsets / Align and the routes' path check all take them;
+  `config/courts.json` only gives the club's four their labels (a new one is
+  "Detector · <name>", 60 fps).
+- **The live page fixed its tiles when it opened.** A run started after the
+  page was opened showed nothing until a reload. The page now asks
+  `GET /api/live/cameras?court=` every 6 s and refreshes itself when the
+  list changes (`router.refresh()`: the tiles already playing keep playing);
+  a "+N high-speed" pill says how many are on; up to nine tiles fit.
+
+**Measured on the dev PC** (a scratch MediaMTX with this config, the dev
+server on scratch recordings, the app driving a two-camera run with
+`--var-server 127.0.0.1`): the live page opened BEFORE the run went from 2 to
+4 tiles by itself ("Detector · PC camera" from the config, "Detector ·
+fakecam1" a name the config does not know), the new camera playing
+1280x800, "In sync", the page never reloaded (a marker set on it survived);
+back to 2 after the stop. `pnpm typecheck` and `pnpm lint` clean.
+
+**Deploying needs the MediaMTX recreate** (§7 of HANDOVER: the config is a
+bind-mounted file): without it, MediaMTX keeps the four fixed names.
+
+---
+
 ## 2026-10-28 — Phones and iPads: 18 device profiles, every page fits; Replay and Live in the header
 
 The owner: make it phone friendly and iPad friendly; and add pages for live
@@ -60,6 +100,11 @@ numbers. Review check at 390×844: rock, loop, save as before. Typecheck,
 lint, `pnpm build` clean. `review-check.mjs` and `live-sync-check.mjs`
 (the earlier scratch tests) are now in `scripts/checks/` with a README
 section on running live tests safely.
+
+**Exported** as public `c9dd5d9` (= padel-full 10b369a, on top of 503026f, no
+Mac commits; secret scan: placeholders and the local dev `changeme` only).
+`infra/` unchanged: the normal deploy line. **Not deployed** until the owner
+runs it.
 
 ## 2026-10-28 — VAR review (mark, rock, loop), "save the moment", live sync, the control room
 

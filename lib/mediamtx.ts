@@ -55,7 +55,13 @@ export async function fetchHls(cameraPath: string, file: string, search: string)
 /** Which paths currently have a publisher, from the control API. */
 export async function mediamtxStatus(): Promise<{ ok: boolean; publishing: string[] }> {
   try {
-    const res = await fetch(`${API_URL}/v3/paths/list`, { headers: authHeaders(), cache: "no-store" });
+    // the camera list asks this every few seconds (lib/courts.ts): a hung
+    // media server must not hang the pages and media requests behind it
+    const res = await fetch(`${API_URL}/v3/paths/list`, {
+      headers: authHeaders(),
+      cache: "no-store",
+      signal: AbortSignal.timeout(2000),
+    });
     if (!res.ok) return { ok: false, publishing: [] };
     const data = (await res.json()) as { items?: { name: string; ready: boolean }[] };
     return { ok: true, publishing: (data.items ?? []).filter((p) => p.ready).map((p) => p.name) };
