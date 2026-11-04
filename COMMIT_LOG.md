@@ -5,6 +5,33 @@ as `padel_analytics/inout/COMMIT_LOG.md`.
 
 ---
 
+## 2026-11-04 — `infra/club-relay/check.ps1`: what is wrong at the club, in one run
+
+The owner, after the 2026-11-04 deploy: the PC's high-fps camera streams on
+the site now, but North and South (the club's security cameras) do not. The
+server has recorded nothing from them for more than 4 h (`/api/health`
+`"cameras": {}`, as on 2026-10-25 and 2026-10-28 at night), so the break is
+on the club side: PC, relay task, Wi-Fi to the NVR, the NVR, the club's
+internet -- none reachable from the dev PC.
+
+`check.ps1` (next to `relay.ps1`, read from the same folder) looks at all of
+it on the club PC and ends with a VERDICT: up since and the sleep setting on
+mains, `relay.env` (values except passwords), the padel-relay task (state,
+last result; result 1 = SYSTEM cannot find ffmpeg), ffmpeg per camera, the
+IPv4 networks and Wi-Fi state (the NVR is reached only through 192.168.66.x),
+NVR ports 554 / 37777, the server's name and port 1935, the internet, and
+each camera's last 8 log lines with restarts in the last hour classified
+(NVR login refused / NVR unreadable / server drops the stream). Passwords are
+masked (relay.env values, `pass=`, `user:pass@`). ASCII only: Windows
+PowerShell 5.1 reads BOM-less scripts in the local code page.
+
+Tested in Windows PowerShell 5.1 on the dev PC with a fake relay.env and
+logs planted with fake passwords and a 401 loop: every planted fault named,
+no password in the output. README: "Is it working?" (the download and run
+lines); HANDOVER §8 points to it.
+
+---
+
 ## 2026-11-03 — The high-speed cameras of any court on the live page, by themselves
 
 The owner, while the in/out project's one-click app (Padel Court Control,
@@ -42,6 +69,18 @@ back to 2 after the stop. `pnpm typecheck` and `pnpm lint` clean.
 
 **Deploying needs the MediaMTX recreate** (§7 of HANDOVER: the config is a
 bind-mounted file): without it, MediaMTX keeps the four fixed names.
+
+Exported as public `a6e989d` (= padel-full `3e4f28a`, a normal commit on top
+of `c9dd5d9`, the rebrand / review / phone rounds, which the server already
+runs: the owner's screenshot of the live page showed the new header tabs).
+Deployed 2026-11-04 by the owner, with the MediaMTX recreate (both
+containers recreated; `/api/version` `1mlePC9DHfXliC3sE5A1e` ->
+`uJV-2I1pQ4FS3htr-trkv`). Before that the server refused the client's test
+camera `court1-det-local1` (a name the old config did not have), silently;
+the Court Control app now checks reception through `/api/health`. The pasted
+deploy block first failed in Windows PowerShell on `&&` (a parse error, so
+nothing ran on the dev PC); from PowerShell the one-line form is
+`ssh root@72.62.236.90 "cd /root/padel-var && ... "`.
 
 ---
 

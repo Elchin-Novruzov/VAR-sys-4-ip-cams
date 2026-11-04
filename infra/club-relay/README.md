@@ -88,6 +88,22 @@ pastes into that PC's PowerShell console ran in reverse order, twice.
 10. **Record the facts** (camera doc §0 and §3): NVR address and channel map,
     encode settings as left, the club's upload speed, photos.
 
+## Is it working? `check.ps1`
+
+When the site says North / South "not streaming", AnyDesk into the club PC
+and run, one line per paste:
+
+```
+Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/Elchin-Novruzov/VAR-sys-4-ip-cams/main/infra/club-relay/check.ps1 -OutFile C:\padel-relay\check.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\padel-relay\check.ps1
+```
+
+It checks the PC (up since, sleep setting), the padel-relay task and its
+ffmpeg, the 192.168.66.x Wi-Fi, the NVR (ports 554 / 37777), the server
+(port 1935), the internet and each camera's last log lines, and ends with a
+VERDICT listing what is wrong. Every password is masked, so the output can
+be pasted to whoever helps.
+
 ## Passwords
 
 Default-style NVR passwords (admin/12345 and the like) get found by scanners in hours if the NVR is
